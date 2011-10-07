@@ -1,0 +1,17 @@
+# instructions for setting up virtual environment for code
+
+sudo pip install virtualenv
+virtualenv --no-site-packages hnenv
+pip -E hnenv install -U ipython numpy
+
+pip -E hnenv install -U nltk
+mv hnenv/build/nltk/#OPTIMIZE: /local/Library/Frameworks/Python.framework/Versions/2.6/lib/python2.6/site-packages/nltk hnenv/lib/python2.7/site-packages/
+ls hnenv/lib/python2.7/site-packages/nltk/
+rm -rf hnenv/build/
+
+pip -E hnenv install pyyaml
+
+./hnenv/bin/ipython
+
+
+>>> nltk.download() # to download nltk punkt sentence package and other things
