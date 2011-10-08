@@ -35,7 +35,7 @@ random.shuffle(negrevs)
 
 # normalize so we have equal pos and neg reviews
 assert(len(posrevs) > len(negrevs))
-posrevs = posrevs[:len(negrevs)]
+#posrevs = posrevs[:len(negrevs)]
 
 print 'c'
 negfeats = [(word_feats(f), 'neg') for f in negrevs]

@@ -1,3 +1,4 @@
 hnenv/*
 *.json
 *.dat
+*.pyc
