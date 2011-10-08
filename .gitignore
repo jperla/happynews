@@ -2,3 +2,5 @@ hnenv/*
 *.json
 *.dat
 *.pyc
+data.*
+yelp*.html
