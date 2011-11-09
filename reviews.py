@@ -17,21 +17,20 @@
 #!/usr/bin/env python
 import random
 import json
+import string
+
+import vectorize
+
 import nltk.classify.util
 from nltk.classify import NaiveBayesClassifier
  
 def word_feats(words):
     return dict([(word, True) for word in words])
 
-def words_from_review_text(text):
-    text = text.replace('[', ' ').replace(']', ' ').replace('/', ' ').replace(',', ' ').replace('.', ' ').replace('---', '   ').replace('--', '  ').replace('?', ' ').replace('!', ' ')
-    words = nltk.tokenize.word_tokenize(text)
-    low_words = [w.lower() for w in words]
-    return low_words
 
 
 if 'data' not in locals(): # useful for running in ipython
-    data = [json.loads(r) for r in open('yelp_academic_dataset.json').readlines()]
+    data = [json.loads(r) for r in open('data/yelp_academic_dataset.json').readlines()]
 
     all_reviews = [d for d in data if d['type'] == 'review']
 
@@ -41,8 +40,8 @@ print 'a'
 pos_stars = 4
 neg_stars = 2
 
-posrevs = [words_from_review_text(r['text']) for r in reviews if r['stars'] >= pos_stars]
-negrevs = [words_from_review_text(r['text']) for r in reviews if r['stars'] <= neg_stars]
+posrevs = [vectorize.words_from_review_text(r['text']) for r in reviews if r['stars'] >= pos_stars]
+negrevs = [vectorize.words_from_review_text(r['text']) for r in reviews if r['stars'] <= neg_stars]
 
 
 print 'b'

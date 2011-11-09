@@ -16,6 +16,8 @@
 """
 import json
 
+import jsondata
+
 def p_of_feature_given_label(pd, label, fname):
     """Accepts NLTK probability distribution, label string, and feature name string.
         Returns float of probability of the feature given label on pd.
@@ -74,11 +76,10 @@ def savefeatures(classifier, filename):
 
             features.append((fname, ratio, posprob, negprob, max_class, pclass))
 
-    save_data(filename, features)
+    jsondata.save(filename, features)
     return features
 
 '''
-pd = classifier._feature_probdist
-f = savefeatures(pd, 'features.json')
+f = savefeatures(classifier, 'features.json')
 '''
 

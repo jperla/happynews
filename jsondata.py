@@ -37,3 +37,4 @@ def read_data(filename):
             yield json.loads(r)
 
 read = read_data # read_data function is deprecated
+save = save_data

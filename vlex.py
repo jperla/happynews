@@ -18,8 +18,10 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+import codecs
 import random
 import itertools
+from functools import partial
 
 import jsondata
 
@@ -65,27 +67,54 @@ def print_lists(lists, width=12):
     return '\n'.join(s)
             
 
+def parse_bayes_into_scores(data):
+    """Accepts a list of 6-tuples of data.
+        The first element is a string, the word.
+        The second to last element is either 'pos' or 'neg' label string.
+        The second element is the score of confidence to that label 
+            (probability of feature given the label versus the opposite label).
+    """
+    # specific to my data; turn the file into a list of (word, score) 2-tups
+    '''
+    posd = [(d[0], d[-1]) for d in data if d[-2] == 'pos']
+    negd = [(d[0], -1 * d[-1]) for d in data if d[-2] == 'neg']
+    '''
+    posd = [(d[0], d[1]) for d in data if d[2] > d[3]]
+    negd = [(d[0], -1 * d[1]) for d in data if d[2] < d[3]]
+    words = posd + negd
+    return words
 
+def normscore(max_abs, score):
+    """Accepts number max_abs of highest score, that maps to 1.0.
+        Also accept score which is a number.
+        Converts the score to the range -1.0 to 1.0. 
+        max_abs scores and higher map to 1.0/-1.0 depending on sign.
+        Returns a float.
+    """
+    if abs(score) >= max_abs:
+        return float(score) / abs(score)
+    else:
+        return float(score) / max_abs
 
 if __name__ == '__main__':
     import sys
-    filename = sys.argv[1]
-    num_intervals = sys.argv[2] if len(sys.argv) > 2 else 10
+    #filename = sys.argv[1]
+    #num_intervals = sys.argv[2] if len(sys.argv) > 2 else 10
 
     fbase,ext = filename.rsplit('.', 1)
-    data = list(jsondata.read(filename))
     intervals = create_intervals(num_intervals, 1)
+    data = list(jsondata.read(filename))
+    
+    raw_words = parse_bayes_into_scores(data)
 
-    # specific to my data; turn the file into a list of (word, score) 2-tups
-    posd = [(d[0], d[-1]) for d in data if d[-2] == 'pos']
-    negd = [(d[0], -1 * d[-1]) for d in data if d[-2] == 'neg']
-    words = posd + negd
+    n = partial(normscore, 30) # 30:1 likelihood pretty extreme already
+    words = [(w, n(s)) for w,s in raw_words]
 
     m = [(p, choose_words(p, words, 200)) for p in intervals]
 
     html = '<html><body><code><pre>%s</pre></code></body></html>'
     p = html % print_lists(m, 15)
 
-    with open(fbase + '.html', 'w') as f:
+    with codecs.open(fbase + '.html', 'w', 'utf8') as f:
         f.write(p)
 

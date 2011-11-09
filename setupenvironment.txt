@@ -13,5 +13,14 @@ pip -E hnenv install pyyaml
 
 ./hnenv/bin/ipython
 
+# setup matplotlib
+Google-Chrome http://jholewinski.wordpress.com/2011/07/21/installing-matplotlib-on-os-x-10-7-with-homebrew/
+
+# rpy is fucked up
+GoogleChrome rpy
+pip -E hnenv install -U ipython rpy2
+# rpy not linking correctly, figure out which version to link to and do so
+otool -L hnenv/lib/python2.7/site-packages/rpy2/rinterface/_rinterface.so 
+ln -s /Library/Frameworks/R.framework/Versions/2.13/Resources/lib/libRblas.dylib ./
 
 >>> nltk.download() # to download nltk punkt sentence package and other things

@@ -1,0 +1,33 @@
+topic 000
+   cup
+   rivera
+   tour
+   team
+   week
+
+
+topic 001
+   page
+   city
+   police
+   bloomberg
+   mayor
+
+
+topic 002
+   percent
+   market
+   1
+   china
+   2
+
+
+topic 003
+   m
+   p
+   street
+   30
+   music
+
+
+topic 004
