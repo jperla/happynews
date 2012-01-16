@@ -8,8 +8,11 @@ import numpy as ny
 from scipy.special import psi
 from scipy.special import gamma as GAMMA
 
+#ny.seterr(invalid='raise')
 
 INITIAL_ELBO = -1e10
+
+final_output = {}
 
 def dirichlet_expectation(alpha):
     """
@@ -170,12 +173,13 @@ def run_em(data):
     gammaC = ny.ones((D, J)) * (1.0 / J)
     initialize_random(gammaC)
 
-    y = ny.ones((D,)) * 0.5
+    y = ny.ones((D,))
+    initialize_random(y)
 
     eta = ny.ones((K+J,)) * 0.15
     initialize_random(eta)
     print 'eta start: {0}'.format(eta)
-    sigma_squared = 1.0
+    sigma_squared = 10.0
 
     iterations = 0
     elbo = INITIAL_ELBO
@@ -184,7 +188,7 @@ def run_em(data):
     while elbo_did_not_converge(elbo, last_elbo):
         for d, (document, comment) in enumerate(izip(documents,comments)):
             ### E-step ###
-            do_E_step(d, document, comment, alphaD, alphaC, betaD, betaC, gammaD[d], gammaC[d], phiD[d], phiC[d], y, eta, sigma_squared)
+            do_E_step(iterations, d, document, comment, alphaD, alphaC, betaD, betaC, gammaD[d], gammaC[d], phiD[d], phiC[d], y, eta, sigma_squared)
 
         ### M-step: ###
         print 'updating betas..'
@@ -206,13 +210,16 @@ def run_em(data):
         # todo: maybe write all these vars every iteration (or every 10) ?
 
         iterations += 1
-    return {'iterations': iterations, 
-            'elbo': elbo, 
-            'y': y, 
-            'eta': eta, 'sigma_squared': sigma_squared, 
-            'beta': (betaD, betaC), 
-            'gamma': (gammaD, gammaC), 
-            'phi': (phiD, phiC), }
+
+        final_output.update({'iterations': iterations, 
+                             'elbo': elbo, 
+                             'y': y, 
+                             'eta': eta, 'sigma_squared': sigma_squared, 
+                             'beta': (betaD, betaC), 
+                             'gamma': (gammaD, gammaC), 
+                             'phi': (phiD, phiC), })
+        print final_output
+    return final_output
 
 def calculate_big_phi(phi1, phi2):
     """ Pretends that two separate sets of D phi matrices (Nd x K) each
@@ -270,7 +277,12 @@ def recalculate_eta_sigma(eta, y, phi1, phi2):
     E_ATA_inverse = calculate_E_ATA_inverse(big_phis)
 
     eta[:] = ny.dot(ny.dot(E_ATA_inverse, E_A.T), y)
+    
+    # todo: don't do this later
+    # keep sigma squared fix
+    #import pdb; pdb.set_trace()
     new_sigma_squared = (1.0 / D) * (ny.dot(y, y) - (ny.dot(ny.dot(y, E_A), eta)))
+    new_sigma_squared = 1.0
     return new_sigma_squared
 
 def calculate_EZZT(big_phi):
@@ -286,7 +298,9 @@ def calculate_EZZT(big_phi):
     for n in xrange(Ndc):
         for m in xrange(Ndc):
             if n != m:
-                inner_sum += (big_phi[n] * big_phi[m].T)
+                new_matrix = (ny.matrix(big_phi[n]).T * ny.matrix(big_phi[m]))
+                assert new_matrix.shape == inner_sum.shape
+                inner_sum += new_matrix
     for n in xrange(Ndc):
         inner_sum += ny.diag(big_phi[n])
     inner_sum /= (Ndc * Ndc)
@@ -302,9 +316,8 @@ def calculate_E_ATA_inverse(big_phis):
     """
     D = len(big_phis)
     (Ndc, KJ) = big_phis[0].shape
-    E_ATA = ny.zeros((KJ, KJ))
-    for d in xrange(D):
-        E_ATA += calculate_EZZT(big_phis[d])
+    E_ATA = ny.sum(calculate_EZZT(big_phis[d]) for d in xrange(D))
+    assert E_ATA.shape == (KJ, KJ)
     return ny.linalg.inv(E_ATA)
 
 def update_gamma_lda_E_step(alpha, phi, gamma):
@@ -332,7 +345,7 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
                  (y / Nσ2) η  — 
                  [2(ηTφd,-n)η + (η∘η)] / (2N2σ2) }
      
-     Note that E[log p(wn|β1:K)] = βTwn
+     Note that E[log p(wn|β1:K)] = log βTwn
     """
     (N, K) = phi.shape
     assert len(eta) == K
@@ -362,7 +375,8 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
     row_normalize(phi)
     return phi
 
-def do_E_step(d, document, comment, 
+def do_E_step(global_iteration,
+                d, document, comment, 
                 alphaD, alphaC, 
                 betaD, betaC, 
                 gammaD, gammaC, 
@@ -381,7 +395,7 @@ def do_E_step(d, document, comment,
     initialize_random(phiC)
 
     local_elbo, local_last_elbo = 0, 0
-    print "starting E step"
+    #print "starting E step"
     i = 0
 
     local_elbo = INITIAL_ELBO
@@ -404,9 +418,9 @@ def do_E_step(d, document, comment,
         local_elbo = calculate_local_elbo(document, comment, alphaD, alphaC, betaD, betaC, gammaD, gammaC, phiD, phiC, y[d], eta, sigma_squared)
         i += 1
 
-        print {'beta': (betaD, betaC), 'gamma': (gammaD, gammaC), 'phi': (phiD, phiC), 'y': y, 'eta': eta}
-        print "e-step iteration {0} ELBO: {1}".format(i, local_elbo)
-    print "done e-step: {0} iterations ELBO: {1}".format(i, local_elbo)
+        #print {'beta': (betaD, betaC), 'gamma': (gammaD, gammaC), 'phi': (phiD, phiC), 'y': y, 'eta': eta}
+        #print "{2}: e-step iteration {0} ELBO: {1}".format(i, local_elbo, global_iteration)
+    print "{2}: done e-step: {0} iterations ELBO: {1}".format(i, local_elbo, global_iteration)
 
 def iterwords(text):
     """Accepts an unchanging dictionary.
@@ -571,12 +585,12 @@ if __name__=='__main__':
                  {5:1, 6:1, 7:1, 9:1,},
                  {5:1, 6:1, 7:1, 8:1,},
                 ],[
-                 {5:1, 6:1, 8:1, 9:1},
-                 {3:1, 5:1, 8:1, 9:1},
-                 {0:1, 6:1, 7:1, 8:1},
                  {0:1, 2:1, 3:1, 7:1},
                  {0:1, 1:1, 3:1, 5:1},
                  {0:1, 2:1, 3:1, 4:1},
+                 {5:1, 6:1, 8:1, 9:1},
+                 {3:1, 5:1, 8:1, 9:1},
+                 {0:1, 6:1, 7:1, 8:1},
                 ])
     test_data = ([
                  {0:1, 2:2, 3:1, 4:1,},
@@ -596,7 +610,7 @@ if __name__=='__main__':
                 ])
 
     try:
-        output = run_em(test_data)
+        output = run_em(noisy_test_data)
     except Exception,e:
         print e
         import pdb; pdb.post_mortem()
