@@ -180,8 +180,8 @@ def run_em(data):
     betaD = initialize_beta(K, W)
     betaC = initialize_beta(J, W)
 
-    phiD = ny.array([(ny.ones((document_Nds[d], K))*(1.0/K)) for d in xrange(D)])
-    phiC = ny.array([(ny.ones((comment_Nds[d], J))*(1.0/J)) for d in xrange(D)])
+    phiD = [(ny.ones((document_Nds[d], K))*(1.0/K)) for d in xrange(D)]
+    phiC = [(ny.ones((comment_Nds[d], J))*(1.0/J)) for d in xrange(D)]
 
     gammaD = ny.ones((D, K)) * (1.0 / K)
     initialize_random(gammaD)
