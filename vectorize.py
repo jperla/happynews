@@ -42,9 +42,9 @@ def words_from_review_text(text):
 def vectorize(lexicon, text, array):
     """Accepts lexicon dictionary, text string, and array. 
         Lexicon dictionary should map string => int, index in array.
-        Array should be zerod out and size of lexicon..
+        Array should be an empty dictionary (sparse vector representation).
         Tokenizes string, then computes counts on a numpy vector.
-        Returns nothing.  Modifies array in place.
+        Returns array.  NOTE: Modifies array in place.
     """
     assert {} == array
     for w in words_from_review_text(text):
@@ -54,6 +54,13 @@ def vectorize(lexicon, text, array):
                 array[i] += 1
             else:
                 array[i] = 1
+    return array
+
+def linearize(sparse_vector):
+    """Accepts a sparse vector (a dictionary).
+        Returns a list of 2-tuples of key-value pairs.
+    """
+    return [(k,v) for k,v in sparse_vector.iteritems()]
 
 def describe_bag(lexicon, array):
     """Accepts lexicon dictionary, and sparse vector array (dictionary).
@@ -91,6 +98,42 @@ def pyfeatures_to_sparse_r_docs(features):
 
 
 if __name__ == '__main__':
+    lexicon = dict([(a,i) for i,a in enumerate(jsondata.read('data/nytimes_med_common_vocab.json'))])
+
+    db = None
+    try:
+        import pymongo
+        db = pymongo.Connection('localhost', 27017).nytimes
+    except:
+        print 'did not connect to mongo; not running'
+
+    docs_with_comments = list(db.article.find({'num_comments':{'$gt': 0}}).sort([('pubdate', -1)]))
+
+    dwc = docs_with_comments
+
+    titles = []
+    docs = []
+    comments = []
+    for d in dwc:
+        titles.append([str(d.get('_id')), d.get('title', 'no title')])
+
+        # get document
+        vector = {}
+        text = open('/Users/josephperla/nytimesscrape/' + d.get('fulltext_loc',''), 'r').read()
+        v = linearize(vectorize(lexicon, text, vector))
+        docs.append(v)
+
+        # get comment
+        text = ' '.join([c.get('commentBody', '') for c in d.get('comments', [])])
+        vector = {}
+        v = linearize(vectorize(lexicon, text, vector))
+        comments.append(v)
+
+    jsondata.save_data('titles.dc.nyt.json', titles)
+    jsondata.save_data('documents.dc.nyt.json', docs)
+    jsondata.save_data('comments.dc.nyt.json', comments)
+
+    '''
     #lexicon = dict([(a[0],i) for i,a in enumerate(jsondata.read('data/yelp_lexicon_med.json'))])
     #lexicon = dict([(a[0],i) for i,a in enumerate(jsondata.read('data/yelp_lexicon_small.json'))])
     lexicon = dict([(a[0],i) for i,a in enumerate(jsondata.read('data/yelp_lexicon.json'))])
@@ -149,4 +192,4 @@ if __name__ == '__main__':
     +                   logistic=FALSE,
     +                   method="sLDA")
     """
-
+    '''
