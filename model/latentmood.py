@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from itertools import izip,chain
+from itertools import izip,chain,repeat
 
 try:
-    import numpypy as ny
+    import numpypy as np
 except:
-    import numpy as ny
+    import numpy as np
 
 from scipy.special import psi
 from scipy.special import gammaln
 
-ny.seterr(invalid='raise')
+np.seterr(invalid='raise')
 
 INITIAL_ELBO = float('-inf')
 
@@ -24,9 +24,9 @@ def dirichlet_expectation(alpha):
     """
     #assert len(alpha.shape) == 1 # jperla: not sure what else it does
     if (len(alpha.shape) == 1):
-        return(psi(alpha) - psi(ny.sum(alpha)))
+        return(psi(alpha) - psi(np.sum(alpha)))
     else:
-        return(psi(alpha) - psi(ny.sum(alpha, 1))[:, ny.newaxis])
+        return(psi(alpha) - psi(np.sum(alpha, 1))[:, np.newaxis])
 
 def row_normalize(matrix):
     """Accepts 2-D matrix.
@@ -34,8 +34,8 @@ def row_normalize(matrix):
         Returns matrix with rows normalized.
     """
     nrows, ncols = matrix.shape
-    rowsums = ny.sum(matrix, axis=1)
-    ny.divide(matrix, rowsums.reshape(nrows, 1), matrix)
+    rowsums = np.sum(matrix, axis=1)
+    np.divide(matrix, rowsums.reshape(nrows, 1), matrix)
     return matrix
 
 def initialize_beta(num_topics, num_words):
@@ -44,9 +44,9 @@ def initialize_beta(num_topics, num_words):
         Returns a TxW matrix which have the probabilities of word
             distributions.  Each row sums to 1.
     """
-    l = 1*ny.random.gamma(100., 1./100., (num_topics, num_words))
+    l = 1*np.random.gamma(100., 1./100., (num_topics, num_words))
     Elogbeta = dirichlet_expectation(l)
-    expElogbeta = ny.exp(Elogbeta)
+    expElogbeta = np.exp(Elogbeta)
     
     # todo: jperla: do I need to normalize? 
     # otherwise word prob doesn't sum to 1?!
@@ -60,7 +60,7 @@ def initialize_uniform(matrix):
         Returns the original matrix, modified.
     """
     nrows,ncols = matrix.shape
-    matrix = ny.ones(matrix.shape)*(1.0/ncols)
+    matrix = np.ones(matrix.shape)*(1.0/ncols)
     return matrix
 
 def initialize_random(matrix):
@@ -70,10 +70,10 @@ def initialize_random(matrix):
         Returns the original matrix, modified.
     """
     if matrix.ndim == 2:
-        matrix[:,:] = ny.random.sample(matrix.shape)
+        matrix[:,:] = np.random.sample(matrix.shape)
         row_normalize(matrix)
     else:
-        matrix[:] = ny.random.sample(matrix.shape)
+        matrix[:] = np.random.sample(matrix.shape)
         matrix[:] = matrix / sum(matrix)
     return matrix
 
@@ -95,7 +95,7 @@ def elbo_did_not_converge(elbo, last_elbo, num_iter=0,
         return True
     else:
         # todo: do a criterion convergence test
-        if ny.abs(elbo - last_elbo) < criterion:
+        if np.abs(elbo - last_elbo) < criterion:
             return False
         else:
             return True
@@ -110,11 +110,18 @@ def recalculate_beta(text, beta, phi):
      # todo: logarithms?
     (K,W) = beta.shape
     D = len(phi)
-    beta[:,:] = ny.zeros(beta.shape)
-    for d in xrange(D):
-        for n,word,count in iterwords(text[d]):
-            for k in xrange(K):
-                beta[k,word] += phi[d][n][k]
+    beta[:,:] = np.zeros(beta.shape)
+    
+    if isinstance(text[0], np.ndarray):
+        for d in xrange(D):
+            for n,word in enumerate(text[d]):
+                for k in xrange(K):
+                    beta[k,word] += phi[d][n][k]
+    else:
+        for d in xrange(D):
+            for n,word,count in iterwords(text[d]):
+                for k in xrange(K):
+                    beta[k,word] += phi[d][n][k]
     row_normalize(beta)
     return beta
 
@@ -160,7 +167,7 @@ def run_em(data):
     W = vocab+1
     D = len(documents)
     K = 10
-    J = 20
+    J = 15
 
     # give at least more documents than topics
     # so that it's not singular
@@ -173,25 +180,25 @@ def run_em(data):
     # "it suffices to fix alpha to uniform 1/K"
     # initialize to ones so that the topics are more evenly distributed
     # good for small datasets
-    alphaD = ny.ones((K,)) * (3.0 / K)
-    alphaC = ny.ones((J,)) * (3.0 / J)
+    alphaD = np.ones((K,)) * (3.0 / K)
+    alphaC = np.ones((J,)) * (3.0 / J)
 
     # Initialize the variational distribution q(beta|lambda)
     betaD = initialize_beta(K, W)
     betaC = initialize_beta(J, W)
 
-    phiD = [(ny.ones((document_Nds[d], K))*(1.0/K)) for d in xrange(D)]
-    phiC = [(ny.ones((comment_Nds[d], J))*(1.0/J)) for d in xrange(D)]
+    phiD = [(np.ones((document_Nds[d], K))*(1.0/K)) for d in xrange(D)]
+    phiC = [(np.ones((comment_Nds[d], J))*(1.0/J)) for d in xrange(D)]
 
-    gammaD = ny.ones((D, K)) * (1.0 / K)
+    gammaD = np.ones((D, K)) * (1.0 / K)
     initialize_random(gammaD)
-    gammaC = ny.ones((D, J)) * (1.0 / J)
+    gammaC = np.ones((D, J)) * (1.0 / J)
     initialize_random(gammaC)
 
-    y = ny.random.normal(0.0, 2.0, (D,))
+    y = np.random.normal(0.0, 2.0, (D,))
     print 'y start: {0}'.format(y)
 
-    eta = ny.random.normal(0.0, 3.0, (K+J,))
+    eta = np.random.normal(0.0, 3.0, (K+J,))
     sigma_squared = 10.0
 
     # EXPERIMENT
@@ -201,12 +208,18 @@ def run_em(data):
 
     print 'eta start: {0}'.format(eta)
 
+
+    # OPTIMIZATION: turn all documents into arrays
+    documents = [doc_to_array(d) for d in documents]
+    comments = [doc_to_array(c) for c in comments]
+
+
     iterations = 0
     elbo = INITIAL_ELBO
     last_elbo = INITIAL_ELBO - 100
     local_i = 0
     #for globaliternum in xrange(100):
-    while elbo_did_not_converge(elbo, last_elbo, iterations, criterion=0.1):
+    while elbo_did_not_converge(elbo, last_elbo, iterations, criterion=0.1, max_iter=20):
         for d, (document, comment) in enumerate(izip(documents,comments)):
             ### E-step ###
             local_i = do_E_step(iterations, d, document, comment, alphaD, alphaC, betaD, betaC, gammaD[d], gammaC[d], phiD[d], phiC[d], y, eta, sigma_squared)
@@ -260,7 +273,7 @@ def calculate_big_phi(phi1, phi2):
     """
     (n1, k1) = phi1.shape
     (n2, k2) = phi2.shape
-    big_phi = ny.zeros((n1 + n2, k1 + k2))
+    big_phi = np.zeros((n1 + n2, k1 + k2))
     big_phi[0:n1,0:k1] = phi1
     big_phi[n1:n1+n2,k1:k1+k2] = phi2
     return big_phi
@@ -288,7 +301,7 @@ def recalculate_eta_sigma(eta, y, phi1, phi2):
     Ndc, KJ = (Nd+Nc,K+J)
 
     #print 'e_a...'
-    E_A = ny.zeros((D, KJ))
+    E_A = np.zeros((D, KJ))
     for d in xrange(D):
         E_A[d,:] = calculate_EZ_from_small_phis(phi1[d], phi2[d])
   
@@ -296,8 +309,8 @@ def recalculate_eta_sigma(eta, y, phi1, phi2):
     E_ATA_inverse = calculate_E_ATA_inverse(phi1, phi2)
 
     #print 'new eta...'
-    new_eta = ny.dot(ny.dot(E_ATA_inverse, E_A.T), y)
-    if ny.sum(ny.abs(new_eta)) > (KJ * KJ * 5):
+    new_eta = np.dot(np.dot(E_ATA_inverse, E_A.T), y)
+    if np.sum(np.abs(new_eta)) > (KJ * KJ * 5):
         print 'ETA is GOING CRAZY {0}'.format(eta)
         print 'aborting the update!!!'
     else:
@@ -306,7 +319,7 @@ def recalculate_eta_sigma(eta, y, phi1, phi2):
     # todo: don't do this later
     # keep sigma squared fix
     #import pdb; pdb.set_trace()
-    #new_sigma_squared = (1.0 / D) * (ny.dot(y, y) - ny.dot(ny.dot(ny.dot(ny.dot(y, E_A), E_ATA_inverse), E_A.T), y))
+    #new_sigma_squared = (1.0 / D) * (np.dot(y, y) - np.dot(np.dot(np.dot(np.dot(y, E_A), E_ATA_inverse), E_A.T), y))
     new_sigma_squared = 1.0
     return new_sigma_squared
 
@@ -321,7 +334,7 @@ def calculate_EZ_from_small_phis(phi1, phi2):
         E[Z] = φ := (1/N)ΣNφn
     """
     Ndc = phi1.shape[0] + phi2.shape[0]
-    ez = ny.concatenate((ny.sum(phi1, axis=0), ny.sum(phi2, axis=0)), axis=1)
+    ez = np.concatenate((np.sum(phi1, axis=0), np.sum(phi2, axis=0)), axis=1)
     return ez / Ndc
     
 def calculate_EZ(big_phi):
@@ -333,7 +346,7 @@ def calculate_EZ(big_phi):
         E[Z] = φ := (1/N)ΣNφn
     """
     Ndc,KJ = big_phi.shape
-    return ny.sum(big_phi, axis=0) / Ndc
+    return np.sum(big_phi, axis=0) / Ndc
 
 def calculate_EZZT_from_small_phis(phi1, phi2):
     """
@@ -346,20 +359,20 @@ def calculate_EZZT_from_small_phis(phi1, phi2):
     Nd,K = phi1.shape
     Nc,J = phi2.shape
     (Ndc, KJ) = (Nd+Nc, K+J)
-    inner_sum = ny.zeros((KJ, KJ))
+    inner_sum = np.zeros((KJ, KJ))
 
-    tl = ny.dot(phi1.T, phi1) * (Nd - 1)
+    tl = np.dot(phi1.T, phi1) * (Nd - 1)
     inner_sum[:K,:K] = tl 
-    br = ny.dot(phi2.T, phi2) * (Nc - 1)
+    br = np.dot(phi2.T, phi2) * (Nc - 1)
     inner_sum[K:,K:] = br
 
-    inner_sum[K:,:K] = ny.ones((J,K))
-    inner_sum[:K,K:] = ny.ones((K,J))
+    inner_sum[K:,:K] = np.ones((J,K))
+    inner_sum[:K,K:] = np.ones((K,J))
 
-    big_phi_sum = ny.concatenate((ny.sum(phi1, axis=0),
-                                  ny.sum(phi2, axis=0)), axis=1)
+    big_phi_sum = np.concatenate((np.sum(phi1, axis=0),
+                                  np.sum(phi2, axis=0)), axis=1)
 
-    inner_sum += ny.diag(big_phi_sum)
+    inner_sum += np.diag(big_phi_sum)
 
     inner_sum /= (Ndc * Ndc)
     return inner_sum
@@ -373,14 +386,14 @@ def calculate_EZZT(big_phi):
         (Also, E[ZdZdT] = (1/N2)(ΣNΣm!=nφd,nφd,mT  +  ΣNdiag{φd,n})
     """
     (Ndc, KJ) = big_phi.shape
-    inner_sum = ny.zeros((KJ, KJ))
+    inner_sum = np.zeros((KJ, KJ))
     for n in xrange(Ndc):
         for m in xrange(Ndc):
             if n != m:
-                new_matrix = (ny.matrix(big_phi[n]).T * ny.matrix(big_phi[m]))
+                new_matrix = (np.matrix(big_phi[n]).T * np.matrix(big_phi[m]))
                 assert new_matrix.shape == inner_sum.shape
                 inner_sum += new_matrix
-    inner_sum += ny.diag(ny.sum(big_phi, axis=0))
+    inner_sum += np.diag(np.sum(big_phi, axis=0))
 
     inner_sum /= (Ndc * Ndc)
     return inner_sum
@@ -397,9 +410,9 @@ def calculate_E_ATA_inverse(phi1, phi2):
     Nd,K = phi1[0].shape
     Nc,J = phi2[0].shape
     (Ndc, KJ) = (Nd+Nc, K+J)
-    E_ATA = ny.sum(calculate_EZZT_from_small_phis(phi1[d], phi2[d]) for d in xrange(D))
+    E_ATA = np.sum(calculate_EZZT_from_small_phis(phi1[d], phi2[d]) for d in xrange(D))
     assert E_ATA.shape == (KJ, KJ)
-    return ny.linalg.inv(E_ATA)
+    return np.linalg.inv(E_ATA)
 
 def update_gamma_lda_E_step(alpha, phi, gamma):
     """
@@ -411,7 +424,7 @@ def update_gamma_lda_E_step(alpha, phi, gamma):
      update gamma: γnew ← α + Σnφn
     """
     assert phi.shape[1] == len(gamma)
-    gamma[:] = alpha + ny.sum(phi, axis=0)
+    gamma[:] = alpha + np.sum(phi, axis=0)
     return gamma
 
 
@@ -436,7 +449,7 @@ def _unoptimized_update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_s
     #assert len(gamma) == K
     #assert beta.shape[0] == K
 
-    phi_sum = ny.sum(phi, axis=0)
+    phi_sum = np.sum(phi, axis=0)
     Ns = (N * sigma_squared)
     ElogTheta = dirichlet_expectation(gamma)
     assert len(ElogTheta) == K
@@ -449,22 +462,29 @@ def _unoptimized_update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_s
         phi_sum -= phi[n]
         assert len(phi_sum) == K
 
-        pB = ny.log(beta[:,word])
-        pD = (front * (((2 * ny.dot(eta, phi_sum) * eta) + eta_dot_eta))
+        pB = np.log(beta[:,word])
+        pD = (front * (((2 * np.dot(eta, phi_sum) * eta) + eta_dot_eta))
                             )
         assert len(pB) == K
         assert len(pC) == K
         assert len(pD) == K
 
         # must exponentiate and sum immediately!
-        phi[n,:] = ny.exp(ElogTheta + pB + pC + pD)
-        phi[n,:] /= ny.sum(phi[n,:])
+        phi[n,:] = np.exp(ElogTheta + pB + pC + pD)
+        phi[n,:] /= np.sum(phi[n,:])
 
         # add this back into the sum
         # unlike in LDA, this cannot be computed in parallel
         phi_sum += phi[n]
 
     return phi
+
+def doc_to_array(doc):
+    """Accepts a list of 2-tuples, first being integer word id, second word count.
+        Returns a numpy array representing the full document.
+        An array of wordids with the length being the sum of the word counts.
+    """
+    return np.array([w for word,count in doc for w in repeat(word, count)])
 
 def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
     """
@@ -477,12 +497,13 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
                  E[log p(wn|β1:K)] + 
                  (y / Nσ2) η  — 
                  [2(ηTφd,-n)η + (η∘η)] / (2N2σ2) }
+            exp{ A + B + C - D}
      
      Note that E[log p(wn|β1:K)] = log βTwn
     """
     (N, K) = phi.shape
 
-    phi_sum = ny.sum(phi, axis=0)
+    phi_sum = np.sum(phi, axis=0)
     Ns = (N * sigma_squared)
     ElogTheta = dirichlet_expectation(gamma)
 
@@ -493,19 +514,30 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
 
     right_eta_times_const = (front * 2 * eta)
 
-    for n,word,count in iterwords(text):
-        phi_sum -= phi[n]
+    if isinstance(text, np.ndarray):
+        # if text is in array form, do an approximate fast matrix update
+        phi_minus_n = -(phi - phi_sum)
 
-        pB = ny.log(beta[:,word])
-        pD = (ny.dot(eta, phi_sum) * right_eta_times_const) 
+        pB = np.log(beta[:,text].T)
+        pD = np.dot(np.matrix(np.sum(eta * phi_minus_n, axis=1)).T, np.matrix(right_eta_times_const))
 
-        # must exponentiate and normalize immediately!
-        phi[n,:] = ny.exp(pB + pD + const)
-        phi[n,:] /= ny.sum(phi[n,:])
+        phi[:,:] = np.exp(pB + pD + const)
+        row_normalize(phi)
+    else:
+        # otherwise, iterate through each word
+        for n,word,count in iterwords(text):
+            phi_sum -= phi[n]
 
-        # add this back into the sum
-        # unlike in LDA, this cannot be computed in parallel
-        phi_sum += phi[n]
+            pB = np.log(beta[:,word])
+            pD = (np.dot(eta, phi_sum) * right_eta_times_const) 
+
+            # must exponentiate and normalize immediately!
+            phi[n,:] = np.exp(pB + pD + const)
+            phi[n,:] /= np.sum(phi[n,:])
+
+            # add this back into the sum
+            # unlike in LDA, this cannot be computed in parallel
+            phi_sum += phi[n]
     return phi
 
 def do_E_step(global_iteration,
@@ -531,8 +563,8 @@ def do_E_step(global_iteration,
 
     local_elbo = INITIAL_ELBO
     last_local_elbo = INITIAL_ELBO - 100
-    while elbo_did_not_converge(local_elbo, last_local_elbo, i, criterion=0.1):
-        # print 'will update gamma...'
+    while elbo_did_not_converge(local_elbo, last_local_elbo, i, criterion=0.1, max_iter=20):
+        #print 'will update gamma...'
         # update gammas
         update_gamma_lda_E_step(alphaD, phiD, gammaD)
         update_gamma_lda_E_step(alphaC, phiC, gammaC)
@@ -545,12 +577,13 @@ def do_E_step(global_iteration,
         #print 'will calculate y...'
         # update the response variable
         # y = ηTE[Z] = ηTφ      [  where φ = 1/N * Σnφn   ]
-        y[d] = ny.dot(eta, calculate_EZ_from_small_phis(phiD, phiC))
+        y[d] = np.dot(eta, calculate_EZ_from_small_phis(phiD, phiC))
 
-        #print 'will calculate elbo...'
-        # calculate new ELBO
-        last_local_elbo = local_elbo
-        local_elbo = calculate_local_elbo(document, comment, alphaD, alphaC, betaD, betaC, gammaD, gammaC, phiD, phiC, y[d], eta, sigma_squared)
+        if i % 2 == 0:
+            #print 'will calculate elbo...'
+            # calculate new ELBO
+            last_local_elbo = local_elbo
+            local_elbo = calculate_local_elbo(document, comment, alphaD, alphaC, betaD, betaC, gammaD, gammaC, phiD, phiC, y[d], eta, sigma_squared)
         '''
         '''
         i += 1
@@ -631,10 +664,10 @@ def elbo_entropy_lda(phi, gamma):
     elbo = 0.0
     (N,K) = phi.shape
     assert len(gamma) == K
-    elbo += -1 * ny.sum(phi * ny.log(phi))
+    elbo += -1 * np.sum(phi * np.log(phi))
 
-    elbo += -1 * gammaln(ny.sum(gamma))
-    elbo += ny.sum(gammaln(gamma))
+    elbo += -1 * gammaln(np.sum(gamma))
+    elbo += np.sum(gammaln(gamma))
 
     ElogTheta = dirichlet_expectation(gamma)
     assert ElogTheta.shape == gamma.shape
@@ -652,12 +685,12 @@ def elbo_slda_y(y, eta, phiD, phiC, sigma_squared):
     """
     elbo = 0.0
     ss = sigma_squared
-    elbo += (-0.5) * ny.log(2 * ny.pi * ss)
+    elbo += (-0.5) * np.log(2 * np.pi * ss)
     
     ez = calculate_EZ_from_small_phis(phiD, phiC)
     ezzt = calculate_EZZT_from_small_phis(phiD, phiC)
-    nEZZTn = ny.dot(ny.dot(eta, ezzt), eta)
-    elbo += (-0.5 / ss) * (y*y - (2 * y * ny.dot(eta, ez)) + nEZZTn)
+    nEZZTn = np.dot(np.dot(eta, ezzt), eta)
+    elbo += (-0.5 / ss) * (y*y - (2 * y * np.dot(eta, ez)) + nEZZTn)
     return elbo
     
 
@@ -678,20 +711,25 @@ def elbo_lda_terms(alpha, gamma, phi, beta, document):
     elbo = 0.0
 
     # E[log p(θ|a)] = log Γ(Σkai) – Σklog Γ(ai) + ΣK(ak-1)E[log θk] 
-    elbo += gammaln(ny.sum(alpha)) - ny.sum(gammaln(alpha))
+    elbo += gammaln(np.sum(alpha)) - np.sum(gammaln(alpha))
 
     ElogTheta = dirichlet_expectation(gamma)
     #assert len(ElogTheta) == len(alpha)
     #assert ElogTheta.shape == alpha.shape
-    elbo += ny.sum((alpha - 1) * ElogTheta)
+    elbo += np.sum((alpha - 1) * ElogTheta)
 
-    for n,word,count in iterwords(document):
-        # E[log p(Zn|θ)] = ΣKφn,kE[log θk]
-        # E[log p(wn|Zn,β1:K)]  = ΣKφn,klog βk,Wn
+    if isinstance(document, np.ndarray):
+        # even faster optimization
+        elbo += np.sum(phi * (ElogTheta + (np.log(beta[:,document]).T)))
+    else:
+        for n,word,count in iterwords(document):
+            # E[log p(Zn|θ)] = ΣKφn,kE[log θk]
+            # E[log p(wn|Zn,β1:K)]  = ΣKφn,klog βk,Wn
 
-        # optimization:
-        # E[log p(Zn|θ)] + E[log p(wn|Zn,β1:K)] = ΣKφn,k(E[log θk] + log βk,Wn)
-        elbo += ny.sum(phi[n] * (ElogTheta + ny.log(beta[:,word])))
+            # optimization:
+            # E[log p(Zn|θ)] + E[log p(wn|Zn,β1:K)] = ΣKφn,k(E[log θk] + log βk,Wn)
+            elbo += np.sum(phi[n] * (ElogTheta + np.log(beta[:,word])))
+
     return elbo
 
 
@@ -700,7 +738,7 @@ def calculate_global_elbo(documents, comments, alphaD, alphaC, betaD, betaC, gam
         Calculate the evidence lower bound.
         Helps you know when convergence happens.
     """
-    return ny.sum(calculate_local_elbo(documents[d], comments[d], alphaD, alphaC, betaD, betaC, gammaD[d], gammaC[d], phiD[d], phiC[d], y[d], eta, sigma_squared) for d in xrange(len(documents)))
+    return np.sum(calculate_local_elbo(documents[d], comments[d], alphaD, alphaC, betaD, betaC, gammaD[d], gammaC[d], phiD[d], phiC[d], y[d], eta, sigma_squared) for d in xrange(len(documents)))
 
             
 if __name__=='__main__':
@@ -738,8 +776,8 @@ if __name__=='__main__':
                 ])
 
     import jsondata
-    numdocs = 100
-    limit_words = 500
+    numdocs = 50
+    limit_words = 200
     docs = jsondata.read('documents.dc.nyt.json')[:numdocs]
     docs = [d[:limit_words] for d in docs]
     comments = jsondata.read('comments.dc.nyt.json')[:numdocs]

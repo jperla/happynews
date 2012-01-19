@@ -201,6 +201,17 @@ def test_update_gamma_lda_E_step():
     assert not same(out, gamma)
     assert same (out, answer)
 
+def test_doc_to_array():
+    text = [(0,1), (1,1)]
+    out = lm.doc_to_array(text)
+    answer = np.array([0, 1])
+    assert same(out, answer)
+
+    doc1 = [(1,3), (2,2), (0,1)]
+    out = lm.doc_to_array(doc1)
+    answer = np.array([1, 1, 1, 2, 2, 0])
+    assert same(out, answer)
+
 def test_update_phi_lda_E_step():
     gamma = np.array([3,4,5])
     text = [(0,1), (1,1)]
@@ -243,8 +254,19 @@ def test_update_phi_lda_E_step():
 
     lm.row_normalize(answer)
 
-    lm.update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared)
-    assert same(phi, answer)
+    out = phi.copy()
+    lm.update_phi_lda_E_step(text, out, gamma, beta, y_d, eta, sigma_squared)
+    assert same(out, answer)
+
+
+    # test the fast updates; which will be slightly different
+    fast_answer = answer.copy()
+    fast_answer[1,:] = np.array([0.03422278, 0.26873478, 0.69704244])
+
+    out = phi.copy()
+    docarray = lm.doc_to_array([(0,1), (1,1)])
+    lm.update_phi_lda_E_step(docarray, out, gamma, beta, y_d, eta, sigma_squared)
+    assert same(out, fast_answer)
 
 def test_elbo():
     # todo: calculate elbo terms
