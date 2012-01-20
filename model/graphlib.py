@@ -1,17 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import random
 from itertools import izip,chain,repeat
 
 try:
-    import numpypy as np
-except:
     import numpy as np
+    np.seterr(invalid='raise')
+except:
+    import numpypy as np
 
-from scipy.special import psi
-from scipy.special import gammaln
+try:
+    from scipy.special import psi, gammaln
+except:
+    from scipypy import psi, gammaln
 
-np.seterr(invalid='raise')
 
 INITIAL_ELBO = float('-inf')
 
@@ -35,7 +38,7 @@ def row_normalize(matrix):
     """
     nrows, ncols = matrix.shape
     rowsums = np.sum(matrix, axis=1)
-    np.divide(matrix, rowsums.reshape(nrows, 1), matrix)
+    np.divide(matrix, np.matrix(rowsums).T, matrix)
     return matrix
 
 def initialize_beta(num_topics, num_words):
@@ -44,14 +47,17 @@ def initialize_beta(num_topics, num_words):
         Returns a TxW matrix which have the probabilities of word
             distributions.  Each row sums to 1.
     """
-    l = 1*np.random.gamma(100., 1./100., (num_topics, num_words))
-    Elogbeta = dirichlet_expectation(l)
-    expElogbeta = np.exp(Elogbeta)
+    
+    #l = 1*np.random.gamma(100., 1./100., (num_topics, num_words))
+    #Elogbeta = dirichlet_expectation(l)
+    #expElogbeta = np.exp(Elogbeta)
     
     # todo: jperla: do I need to normalize? 
     # otherwise word prob doesn't sum to 1?!
 
-    return row_normalize(expElogbeta)
+    # for now, just initialize uniformly because we do not have numpypy.random.gamma
+    beta = np.ones((num_topics, num_words)) * (1.0 / num_words)
+    return beta
 
 def initialize_uniform(matrix):
     """Accepts a matrix with a defined shape.
@@ -63,6 +69,12 @@ def initialize_uniform(matrix):
     matrix = np.ones(matrix.shape)*(1.0/ncols)
     return matrix
 
+def random_sample(shape):
+    a = np.zeros(shape)
+    for i in xrange(len(a)):
+        a[i] = random.random()
+    return row_normalize(a)
+
 def initialize_random(matrix):
     """Accepts a matrix with a defined shape.
         Initializes it to to random probabilities on row.
@@ -70,10 +82,10 @@ def initialize_random(matrix):
         Returns the original matrix, modified.
     """
     if matrix.ndim == 2:
-        matrix[:,:] = np.random.sample(matrix.shape)
+        matrix[:,:] = random_sample(matrix.shape)
         row_normalize(matrix)
     else:
-        matrix[:] = np.random.sample(matrix.shape)
+        matrix[:] = random_sample(matrix.shape)
         matrix[:] = matrix / sum(matrix)
     return matrix
 
@@ -125,21 +137,6 @@ def recalculate_beta(text, beta, phi):
     row_normalize(beta)
     return beta
 
-
-def process_doc(arg):
-    """Helper method for processing a document in parallel.
-        Useful for multiprocessing Pools.
-        Returns data to update.
-    """
-    print 'in this step'
-    (iterations, d, document, comment, alphaD, alphaC, betaD, betaC, gammaD, gammaC, phiD, phiC, y, eta, sigma_squared) = arg
-    print 'now in this step'
-    try:
-        local_i = do_E_step(iterations, d, document, comment, alphaD, alphaC, betaD, betaC, gammaD, gammaC, phiD, phiC, y, eta, sigma_squared)
-    except Exception,e:
-        print e
-    print 'finished in this step: %s' % local_i
-    return (d, local_i, gammaD, gammaC, phiD, phiC, y)
 
 def calculate_big_phi(phi1, phi2):
     """ Pretends that two separate sets of D phi matrices (Nd x K) each
@@ -380,12 +377,9 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
      Note that E[log p(wn|β1:K)] = log βTwn
     """
     (N, K) = phi.shape
-    print 'a'
 
     phi_sum = np.sum(phi, axis=0)
-    print 'b'
     Ns = (N * sigma_squared)
-    print 'c'
     ElogTheta = dirichlet_expectation(gamma)
 
     front = (-1.0 / (2 * N * Ns))
@@ -398,50 +392,11 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
     if isinstance(text, np.ndarray):
         # if text is in array form, do an approximate fast matrix update
         phi_minus_n = -(phi - phi_sum)
-        print 'd'
-        tempB = beta[:,text].T
-        print 'e'
-        pB = np.log(tempB)
-        print 'et'
-        tempC = np.matrix(np.sum(eta * phi_minus_n, axis=1)).T
-        print 'fg'
-        tempD = np.matrix(right_eta_times_const)
-        print 'f'
-        print 'shape tempc: %s shape tempd: %s' % (tempC.shape, tempD.shape)
-
-
-        def matrixmultiply(a,b, alpha=1.0, beta=0.0, c=None, trans_a=0, trans_b=0):
-            """ Return alpha*(a*b) + beta*c.
-
-                a,b,c : matrices
-                alpha, beta: scalars
-                trans_a : 0 (a not transposed), 
-                        1 (a transposed), 
-                        2 (a conjugate transposed)
-                trans_b : 0 (b not transposed), 
-                        1 (b transposed), 
-                        2 (b conjugate transposed)
-            """
-            import scipy
-            import scipy.linalg
-            if c:
-                gemm,=scipy.linalg.get_blas_funcs(('gemm',),(a,b,c))
-            else:
-                gemm,=scipy.linalg.get_blas_funcs(('gemm',),(a,b))
-            return gemm(alpha, a, b, beta, c, trans_a, trans_b)
-
-
-        if True:
-            phi[:,:] = matrixmultiply(tempC, tempD)
-        else:
-            phi[:,:] = ny.dot(tempC, tempD)
-
-        print 'g'
-        phi[:,:] = np.exp(pB + phi[:,:] + const)
-        print 'i'
-
+        phi[:,:] = np.log(beta[:,text].T)
+        phi[:,:] += np.dot(np.matrix(np.sum(eta * phi_minus_n, axis=1)).T, np.matrix(right_eta_times_const))
+        phi[:,:] += const
+        phi[:,:] = np.exp(phi[:,:])
         row_normalize(phi)
-        print 'j'
     else:
         # otherwise, iterate through each word
         for n,word,count in iterwords(text):
@@ -457,7 +412,6 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
             # add this back into the sum
             # unlike in LDA, this cannot be computed in parallel
             phi_sum += phi[n]
-    print 'k'
     return phi
 
 def do_E_step(global_iteration,

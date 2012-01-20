@@ -16,7 +16,11 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 import json
-import numpy
+
+try:
+    import numpy
+except:
+    import numpypy as numpy
 
 def save_data(filename, data):
     """Accepts filenamestring and a list of objects, probably dictionaries.

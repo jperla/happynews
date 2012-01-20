@@ -1,20 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import random
 from itertools import izip,chain,repeat
-import multiprocessing
 
 try:
-    import numpypy as np
-except:
     import numpy as np
+    np.seterr(invalid='raise')
+except:
+    import numpypy as np
 
-from scipy.special import psi
-from scipy.special import gammaln
+try:
+    from scipy.special import psi, gammaln
+except:
+    from scipypy import psi, gammaln
+    
 
 import graphlib
 
-np.seterr(invalid='raise')
 
 INITIAL_ELBO = float('-inf')
 
@@ -81,37 +84,22 @@ def run_em(data, K, J):
     betaD = graphlib.initialize_beta(K, W)
     betaC = graphlib.initialize_beta(J, W)
 
-    def make_shared_array(w, h):
-        """Accepts width and height. Makes shared array of those dimensions.
-        """
-        import ctypes
-        import numpy as np
-
-        shared_array_base = multiprocessing.Array(ctypes.c_double, w*h)
-        shared_array = np.ctypeslib.as_array(shared_array_base.get_obj())
-        shared_array = shared_array.reshape(w, h)
-
-        # No copy was made
-        assert shared_array.base.base is shared_array_base.get_obj()
-        return shared_array
-
-    def make_shared_ones(w, h):
-        shared_array = make_shared_array(w, h)
-        shared_array[:,:] = 1
-        return shared_array
-
-    phiD = [(make_shared_ones(document_Nds[d], K)*(1.0/K)) for d in xrange(D)]
-    phiC = [(make_shared_ones(comment_Nds[d], J)*(1.0/J)) for d in xrange(D)]
+    phiD = [(np.ones((document_Nds[d], K))*(1.0/K)) for d in xrange(D)]
+    phiC = [(np.ones((comment_Nds[d], J))*(1.0/J)) for d in xrange(D)]
 
     gammaD = np.ones((D, K)) * (1.0 / K)
     graphlib.initialize_random(gammaD)
     gammaC = np.ones((D, J)) * (1.0 / J)
     graphlib.initialize_random(gammaC)
 
-    y = np.random.normal(0.0, 2.0, (D,))
+    def random_normal(mu, sigma, size):
+        """Define my own random normal, since numpypy does not have np.random.normal ."""
+        return np.array([random.gauss(mu, sigma) for i in xrange(size)])
+
+    y = random_normal(0.0, 2.0, (D,))
     print 'y start: {0}'.format(y)
 
-    eta = np.random.normal(0.0, 3.0, (K+J,))
+    eta = random_normal(0.0, 3.0, (K+J,))
     sigma_squared = 10.0
 
     # EXPERIMENT
@@ -133,26 +121,10 @@ def run_em(data, K, J):
     #for globaliternum in xrange(100):
     while graphlib.elbo_did_not_converge(elbo, last_elbo, 
                                          iterations, criterion=0.1, max_iter=20):
-
-        alldocs = enumerate(izip(documents,comments))
-
-        if True:
-            ##### Parallel E-step #####
-            pool = multiprocessing.Pool(processes=None)
-            args = [(iterations, d, document, comment, alphaD, alphaC, betaD, betaC, gammaD[d], gammaC[d], phiD[d], phiC[d], y, eta, sigma_squared) for d,(document,comment) in alldocs]
-            results = pool.imap_unordered(graphlib.process_doc, args)
-
-            for r in results:
-                (d, local_i, new_gammaD, new_gammaC, new_phiD, new_phiC, new_y) = r
-                gammaD[d] = new_gammaD
-                gammaC[d] = new_gammaC
-                phiD[d] = new_phiD
-                phiC[d] = new_phiC
-                y[d] = new_y[d]
-        else:
-            ### E-step ###
-            for d, (document, comment) in alldocs:
-                local_i = graphlib.do_E_step(iterations, d, document, comment, alphaD, alphaC, betaD, betaC, gammaD[d], gammaC[d], phiD[d], phiC[d], y, eta, sigma_squared)
+        
+        ### E-step ###
+        for d, (document, comment) in enumerate(izip(documents,comments)):
+            local_i = graphlib.do_E_step(iterations, d, document, comment, alphaD, alphaC, betaD, betaC, gammaD[d], gammaC[d], phiD[d], phiC[d], y, eta, sigma_squared)
 
 
         ### M-step: ###
@@ -185,7 +157,7 @@ def run_em(data, K, J):
                              'gammaC': gammaC,
                              'phiD': phiD,
                              'phiC': phiC, })
-        print final_output
+        #print final_output
         print 'y: %s' % y
         print 'eta: %s' % eta
         print 'ss: %s' % sigma_squared
@@ -231,8 +203,8 @@ if __name__=='__main__':
                 ])
 
     import jsondata
-    numdocs = 20
-    limit_words = 50
+    numdocs = 100
+    limit_words = 500
     docs = jsondata.read('documents.dc.nyt.json')[:numdocs]
     docs = [d[:limit_words] for d in docs]
     comments = jsondata.read('comments.dc.nyt.json')[:numdocs]
