@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import latentmood as lm
+import graphlib as lm
 
 def same(a, b):
     print a
