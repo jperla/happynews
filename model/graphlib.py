@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import math
 import random
 from itertools import izip,chain,repeat
 
@@ -14,6 +15,123 @@ try:
     from scipy.special import psi, gammaln
 except:
     from scipypy import psi, gammaln
+
+
+########### PYPY-only functions! ###########
+def ispypy():
+    """Returns a boolean True if pypy is running the program.
+        Does this by checking the matrix module, which is not currently implemented.
+    """
+    return True
+    return 'matrix' in dir(np)
+
+def axis_sum(matrix, axis):
+    """Accepts a 2-d array and axis integer (0 or 1).
+    """
+    assert axis in [0, 1]
+    if ispypy():
+        nrows,ncols = matrix.shape
+        if axis == 1:
+            return np.array([np.sum(matrix[i]) for i in xrange(nrows)])
+        else:
+            return np.array([np.sum(matrix[:,i]) for i in xrange(ncols)])
+    else:
+        rowsums = np.sum(matrix, axis=1)
+        return rowsums
+
+def np_concatenate((a, b), axis=1):
+    """Accepts a 1-d array and axis (only 1) and concatenates them.
+    """
+    assert axis in [1]
+    if ispypy():
+        n = np.zeros((len(a) + len(b),))
+        n[:len(a)] = a
+        n[len(a):] = b
+        return n
+    else:
+        return np.concatenate(a, b, axis=1)
+
+
+def matrix_multiply(a, b):
+    """Takes two matrices and does a complicated matrix multiply.  Yes that one.
+    """
+    if len(a.shape) == 1:
+        nrows, = a.shape
+        a = np.zeros((nrows, 1))
+
+    if len(b.shape) == 1:
+        bc, = b.shape
+        if bc == a.shape[1]:
+            b = np.zeros((bc, 1))
+        else:
+            b = np.zeros((1, bc))
+       
+    nrows,ac = a.shape
+    bc,ncols = b.shape
+
+    assert ac == bc
+    if ispypy():
+        n = np.zeros((nrows, ncols))
+        for i in xrange(nrows):
+            for j in xrange(ncols):
+                n[i,j] = np.sum(a[i] * b[:,j])
+        return n
+    else:
+        np.dot(a, b)
+
+
+def np_diag(a):
+    """Takes a 1-d vector and makes it the diagonal of a 2-d vector
+    """
+    if ispypy():
+        nrows, = a.shape
+        n = np.zeros((nrows, nrows))
+        for i in xrange(nrows):
+            n[i,i] = a[i]
+        return n
+    else:
+        return np.diag(a)
+
+def np_second_arg_array_index(matrix, array):
+    """look at second part."""
+    if ispypy():
+        nrows,ncols = matrix.shape
+        if len(array.shape) == 1:
+            n = np.zeros((1, array.shape[0]))
+            for i in xrange(array.shape[0]):
+                n[0,i] = np.sum(matrix[:,int(array[i])])
+            return n
+        else:
+            assert len(array.shape) == 2
+            n = np.zeros(array.shape)
+            for i in xrange(array.shape[0]):
+                n[i] = np_second_arg_array_index(matrix, array[i])
+            return n
+
+    else:
+        return matrix[:,array]
+
+def np_log(a):
+    """Takes a nd array or int, returns log
+    """
+    if ispypy():
+        if isinstance(a, np.ndarray):
+            n = np.zeros(a.shape)
+            if len(a.shape) == 1:
+                for i in xrange(len(a)):
+                    n[i] = math.log(a[i])
+            else:
+                assert len(a.shape) == 2
+                for i in xrange(a.shape[0]):
+                    for j in xrange(a.shape[1]):
+                        n[i,j] = math.log(a[i,j])
+            return n
+        else:
+            return math.log(a)
+    else:
+        return np.log(a)
+########### END END PYPY-only functions! ###########
+
 
 
 INITIAL_ELBO = float('-inf')
@@ -31,14 +149,20 @@ def dirichlet_expectation(alpha):
     else:
         return(psi(alpha) - psi(np.sum(alpha, 1))[:, np.newaxis])
 
+
 def row_normalize(matrix):
     """Accepts 2-D matrix.
         Modifies matrix in place.   
         Returns matrix with rows normalized.
     """
     nrows, ncols = matrix.shape
-    rowsums = np.sum(matrix, axis=1)
-    np.divide(matrix, np.matrix(rowsums).T, matrix)
+    rowsums = axis_sum(matrix, axis=1)
+
+    if ispypy():
+        for i in xrange(len(rowsums)):
+            matrix[i] /= rowsums[i]
+    else:
+        np.divide(matrix, np.matrix(rowsums).T, matrix)
     return matrix
 
 def initialize_beta(num_topics, num_words):
@@ -100,6 +224,8 @@ def elbo_did_not_converge(elbo, last_elbo, num_iter=0,
         Figures out whether the elbo is sufficiently smaller than
             last_elbo.
     """
+    # todo: fix elbo!!
+    return True
     if num_iter >= max_iter:
         return False
 
@@ -184,7 +310,7 @@ def recalculate_eta_sigma(eta, y, phi1, phi2):
     E_ATA_inverse = calculate_E_ATA_inverse(phi1, phi2)
 
     #print 'new eta...'
-    new_eta = np.dot(np.dot(E_ATA_inverse, E_A.T), y)
+    new_eta = matrix_multiply(matrix_multiply(E_ATA_inverse, E_A.T), y)
     if np.sum(np.abs(new_eta)) > (KJ * KJ * 5):
         print 'ETA is GOING CRAZY {0}'.format(eta)
         print 'aborting the update!!!'
@@ -209,7 +335,7 @@ def calculate_EZ_from_small_phis(phi1, phi2):
         E[Z] = φ := (1/N)ΣNφn
     """
     Ndc = phi1.shape[0] + phi2.shape[0]
-    ez = np.concatenate((np.sum(phi1, axis=0), np.sum(phi2, axis=0)), axis=1)
+    ez = np_concatenate((axis_sum(phi1, axis=0), axis_sum(phi2, axis=0)), axis=1)
     return ez / Ndc
     
 def calculate_EZ(big_phi):
@@ -236,18 +362,18 @@ def calculate_EZZT_from_small_phis(phi1, phi2):
     (Ndc, KJ) = (Nd+Nc, K+J)
     inner_sum = np.zeros((KJ, KJ))
 
-    tl = np.dot(phi1.T, phi1) * (Nd - 1)
+    tl = matrix_multiply(phi1.T, phi1) * (Nd - 1)
     inner_sum[:K,:K] = tl 
-    br = np.dot(phi2.T, phi2) * (Nc - 1)
+    br = matrix_multiply(phi2.T, phi2) * (Nc - 1)
     inner_sum[K:,K:] = br
 
     inner_sum[K:,:K] = np.ones((J,K))
     inner_sum[:K,K:] = np.ones((K,J))
 
-    big_phi_sum = np.concatenate((np.sum(phi1, axis=0),
-                                  np.sum(phi2, axis=0)), axis=1)
+    big_phi_sum = np_concatenate((axis_sum(phi1, axis=0),
+                                  axis_sum(phi2, axis=0)), axis=1)
 
-    inner_sum += np.diag(big_phi_sum)
+    inner_sum += np_diag(big_phi_sum)
 
     inner_sum /= (Ndc * Ndc)
     return inner_sum
@@ -265,10 +391,10 @@ def calculate_EZZT(big_phi):
     for n in xrange(Ndc):
         for m in xrange(Ndc):
             if n != m:
-                new_matrix = (np.matrix(big_phi[n]).T * np.matrix(big_phi[m]))
+                new_matrix = matrix_multiply(big_phi[n].T, big_phi[m])
                 assert new_matrix.shape == inner_sum.shape
                 inner_sum += new_matrix
-    inner_sum += np.diag(np.sum(big_phi, axis=0))
+    inner_sum += np_diag(axis_sum(big_phi, axis=0))
 
     inner_sum /= (Ndc * Ndc)
     return inner_sum
@@ -285,9 +411,14 @@ def calculate_E_ATA_inverse(phi1, phi2):
     Nd,K = phi1[0].shape
     Nc,J = phi2[0].shape
     (Ndc, KJ) = (Nd+Nc, K+J)
-    E_ATA = np.sum(calculate_EZZT_from_small_phis(phi1[d], phi2[d]) for d in xrange(D))
+    E_ATA = sum(calculate_EZZT_from_small_phis(phi1[d], phi2[d]) for d in xrange(D))
     assert E_ATA.shape == (KJ, KJ)
-    return np.linalg.inv(E_ATA)
+
+    if ispypy():
+        # todo: this is massively broken!!!
+        return np_diag(np.ones((KJ,)))
+    else:
+        return np.linalg.inv(E_ATA)
 
 def update_gamma_lda_E_step(alpha, phi, gamma):
     """
@@ -299,7 +430,7 @@ def update_gamma_lda_E_step(alpha, phi, gamma):
      update gamma: γnew ← α + Σnφn
     """
     assert phi.shape[1] == len(gamma)
-    gamma[:] = alpha + np.sum(phi, axis=0)
+    gamma[:] = alpha + axis_sum(phi, axis=0)
     return gamma
 
 
@@ -324,7 +455,7 @@ def _unoptimized_update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_s
     #assert len(gamma) == K
     #assert beta.shape[0] == K
 
-    phi_sum = np.sum(phi, axis=0)
+    phi_sum = axis_sum(phi, axis=0)
     Ns = (N * sigma_squared)
     ElogTheta = dirichlet_expectation(gamma)
     assert len(ElogTheta) == K
@@ -337,7 +468,7 @@ def _unoptimized_update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_s
         phi_sum -= phi[n]
         assert len(phi_sum) == K
 
-        pB = np.log(beta[:,word])
+        pB = np_log(beta[:,word])
         pD = (front * (((2 * np.dot(eta, phi_sum) * eta) + eta_dot_eta))
                             )
         assert len(pB) == K
@@ -378,7 +509,7 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
     """
     (N, K) = phi.shape
 
-    phi_sum = np.sum(phi, axis=0)
+    phi_sum = axis_sum(phi, axis=0)
     Ns = (N * sigma_squared)
     ElogTheta = dirichlet_expectation(gamma)
 
@@ -392,8 +523,8 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
     if isinstance(text, np.ndarray):
         # if text is in array form, do an approximate fast matrix update
         phi_minus_n = -(phi - phi_sum)
-        phi[:,:] = np.log(beta[:,text].T)
-        phi[:,:] += np.dot(np.matrix(np.sum(eta * phi_minus_n, axis=1)).T, np.matrix(right_eta_times_const))
+        phi[:,:] = np_log(np_second_arg_array_index(beta,text).T)
+        phi[:,:] += matrix_multiply(axis_sum(eta * phi_minus_n, axis=1).T, right_eta_times_const)
         phi[:,:] += const
         phi[:,:] = np.exp(phi[:,:])
         row_normalize(phi)
@@ -402,7 +533,7 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
         for n,word,count in iterwords(text):
             phi_sum -= phi[n]
 
-            pB = np.log(beta[:,word])
+            pB = np_log(beta[:,word])
             pD = (np.dot(eta, phi_sum) * right_eta_times_const) 
 
             # must exponentiate and normalize immediately!
@@ -538,7 +669,7 @@ def elbo_entropy_lda(phi, gamma):
     elbo = 0.0
     (N,K) = phi.shape
     assert len(gamma) == K
-    elbo += -1 * np.sum(phi * np.log(phi))
+    elbo += -1 * np.sum(phi * np_log(phi))
 
     elbo += -1 * gammaln(np.sum(gamma))
     elbo += np.sum(gammaln(gamma))
@@ -559,7 +690,7 @@ def elbo_slda_y(y, eta, phiD, phiC, sigma_squared):
     """
     elbo = 0.0
     ss = sigma_squared
-    elbo += (-0.5) * np.log(2 * np.pi * ss)
+    elbo += (-0.5) * np_log(2 * np.pi * ss)
     
     ez = calculate_EZ_from_small_phis(phiD, phiC)
     ezzt = calculate_EZZT_from_small_phis(phiD, phiC)
@@ -594,7 +725,7 @@ def elbo_lda_terms(alpha, gamma, phi, beta, document):
 
     if isinstance(document, np.ndarray):
         # even faster optimization
-        elbo += np.sum(phi * (ElogTheta + (np.log(beta[:,document]).T)))
+        elbo += np.sum(phi * (ElogTheta + (np_log(np_second_arg_array_index(beta,document).T))))
     else:
         for n,word,count in iterwords(document):
             # E[log p(Zn|θ)] = ΣKφn,kE[log θk]
@@ -602,7 +733,7 @@ def elbo_lda_terms(alpha, gamma, phi, beta, document):
 
             # optimization:
             # E[log p(Zn|θ)] + E[log p(wn|Zn,β1:K)] = ΣKφn,k(E[log θk] + log βk,Wn)
-            elbo += np.sum(phi[n] * (ElogTheta + np.log(beta[:,word])))
+            elbo += np.sum(phi[n] * (ElogTheta + np_log(beta[:,word])))
 
     return elbo
 

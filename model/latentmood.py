@@ -92,9 +92,11 @@ def run_em(data, K, J):
     gammaC = np.ones((D, J)) * (1.0 / J)
     graphlib.initialize_random(gammaC)
 
-    def random_normal(mu, sigma, size):
+    def random_normal(mu, sigma, shape):
         """Define my own random normal, since numpypy does not have np.random.normal ."""
-        return np.array([random.gauss(mu, sigma) for i in xrange(size)])
+        size = shape[0]
+        n = np.array([random.gauss(mu, sigma) for i in xrange(size)])
+        return n
 
     y = random_normal(0.0, 2.0, (D,))
     print 'y start: {0}'.format(y)
@@ -202,6 +204,7 @@ if __name__=='__main__':
                  [(5,1), (6,1), (7,1), (9,2),],
                 ])
 
+    '''
     import jsondata
     numdocs = 100
     limit_words = 500
@@ -214,9 +217,11 @@ if __name__=='__main__':
     print '%s total words in comments' % sum(len(c) for c in comments)
 
     real_data = [docs, comments]
+    '''
+    real_data = test_data
 
     try:
-        output = run_em(real_data, 3, 4)
+        output = run_em(real_data, 2, 3)
     except Exception,e:
         print e
         import pdb; pdb.post_mortem()
