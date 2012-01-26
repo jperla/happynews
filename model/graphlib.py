@@ -138,6 +138,20 @@ INITIAL_ELBO = float('-inf')
 
 final_output = {}
 
+
+
+def log_row_normalize(m):
+    """Does row-normalize in log space.
+        All values in m are log probabilities.
+    """
+    assert len(m.shape) == 2
+    lognorm = np.logaddexp.reduce(m, axis=1)
+    lognorm.shape = (lognorm.shape[0],1)
+    m -= lognorm
+    return m
+
+
+
 def dirichlet_expectation(alpha):
     """
     From Matt Hoffman:
@@ -172,15 +186,15 @@ def initialize_beta(num_topics, num_words):
             distributions.  Each row sums to 1.
     """
     
-    #l = 1*np.random.gamma(100., 1./100., (num_topics, num_words))
-    #Elogbeta = dirichlet_expectation(l)
-    #expElogbeta = np.exp(Elogbeta)
+    l = 1*np.random.gamma(100., 1./100., (num_topics, num_words))
+    Elogbeta = dirichlet_expectation(l)
+    beta = np.exp(Elogbeta)
     
     # todo: jperla: do I need to normalize? 
     # otherwise word prob doesn't sum to 1?!
 
     # for now, just initialize uniformly because we do not have numpypy.random.gamma
-    beta = np.ones((num_topics, num_words)) * (1.0 / num_words)
+    #beta = np.ones((num_topics, num_words)) * (1.0 / num_words)
     return beta
 
 def initialize_uniform(matrix):
@@ -224,8 +238,6 @@ def elbo_did_not_converge(elbo, last_elbo, num_iter=0,
         Figures out whether the elbo is sufficiently smaller than
             last_elbo.
     """
-    # todo: fix elbo!!
-    return True
     if num_iter >= max_iter:
         return False
 
@@ -310,7 +322,8 @@ def recalculate_eta_sigma(eta, y, phi1, phi2):
     E_ATA_inverse = calculate_E_ATA_inverse(phi1, phi2)
 
     #print 'new eta...'
-    new_eta = matrix_multiply(matrix_multiply(E_ATA_inverse, E_A.T), y)
+    #new_eta = matrix_multiply(matrix_multiply(E_ATA_inverse, E_A.T), y)
+    new_eta = np.dot(np.dot(E_ATA_inverse, E_A.T), y)
     if np.sum(np.abs(new_eta)) > (KJ * KJ * 5):
         print 'ETA is GOING CRAZY {0}'.format(eta)
         print 'aborting the update!!!'
@@ -335,7 +348,7 @@ def calculate_EZ_from_small_phis(phi1, phi2):
         E[Z] = φ := (1/N)ΣNφn
     """
     Ndc = phi1.shape[0] + phi2.shape[0]
-    ez = np_concatenate((axis_sum(phi1, axis=0), axis_sum(phi2, axis=0)), axis=1)
+    ez = np.concatenate((np.sum(phi1, axis=0), np.sum(phi2, axis=0)), axis=1)
     return ez / Ndc
     
 def calculate_EZ(big_phi):
@@ -362,18 +375,34 @@ def calculate_EZZT_from_small_phis(phi1, phi2):
     (Ndc, KJ) = (Nd+Nc, K+J)
     inner_sum = np.zeros((KJ, KJ))
 
-    tl = matrix_multiply(phi1.T, phi1) * (Nd - 1)
-    inner_sum[:K,:K] = tl 
-    br = matrix_multiply(phi2.T, phi2) * (Nc - 1)
-    inner_sum[K:,K:] = br
+    p1 = np.matrix(phi1)
+    p2 = np.matrix(phi2)
 
-    inner_sum[K:,:K] = np.ones((J,K))
-    inner_sum[:K,K:] = np.ones((K,J))
+    for i in xrange(K):
+        for j in xrange(K):
+            m = np.dot(np.matrix(p1[:,i]), np.matrix(p1[:,j]).T)
+            inner_sum[i,j] = np.sum(m) - np.sum(np.diag(m))
 
-    big_phi_sum = np_concatenate((axis_sum(phi1, axis=0),
-                                  axis_sum(phi2, axis=0)), axis=1)
+    for i in xrange(J):
+        for j in xrange(J):
+            m = np.dot(np.matrix(p2[:,i]), np.matrix(p2[:,j]).T)
+            inner_sum[K+i,K+j] = np.sum(m) - np.sum(np.diag(m))
 
-    inner_sum += np_diag(big_phi_sum)
+
+    for i in xrange(K):
+        for j in xrange(J):
+            m = np.dot(np.matrix(p1[:,i]), np.matrix(p2[:,j]).T)
+            inner_sum[i,K+j] = np.sum(m)
+
+    for i in xrange(J):
+        for j in xrange(K):
+            m = np.dot(np.matrix(p2[:,i]), np.matrix(p1[:,j]).T)
+            inner_sum[K+i,j] = np.sum(m)
+
+    big_phi_sum = np.concatenate((np.sum(phi1, axis=0),
+                                  np.sum(phi2, axis=0)), axis=1)
+    assert big_phi_sum.shape == (KJ,)
+    inner_sum += np.diag(big_phi_sum)
 
     inner_sum /= (Ndc * Ndc)
     return inner_sum
@@ -391,10 +420,11 @@ def calculate_EZZT(big_phi):
     for n in xrange(Ndc):
         for m in xrange(Ndc):
             if n != m:
-                new_matrix = matrix_multiply(big_phi[n].T, big_phi[m])
+                #new_matrix = matrix_multiply(big_phi[n].T, big_phi[m])
+                new_matrix = np.dot(np.matrix(big_phi[n]).T, np.matrix(big_phi[m]))
                 assert new_matrix.shape == inner_sum.shape
                 inner_sum += new_matrix
-    inner_sum += np_diag(axis_sum(big_phi, axis=0))
+    inner_sum += np.diag(np.sum(big_phi, axis=0))
 
     inner_sum /= (Ndc * Ndc)
     return inner_sum
@@ -509,7 +539,7 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
     """
     (N, K) = phi.shape
 
-    phi_sum = axis_sum(phi, axis=0)
+    phi_sum = np.sum(phi, axis=0)
     Ns = (N * sigma_squared)
     ElogTheta = dirichlet_expectation(gamma)
 
@@ -523,8 +553,10 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
     if isinstance(text, np.ndarray):
         # if text is in array form, do an approximate fast matrix update
         phi_minus_n = -(phi - phi_sum)
-        phi[:,:] = np_log(np_second_arg_array_index(beta,text).T)
-        phi[:,:] += matrix_multiply(axis_sum(eta * phi_minus_n, axis=1).T, right_eta_times_const)
+        #phi[:,:] = np_log(np_second_arg_array_index(beta,text).T)
+        phi[:,:] = np.log(beta[:,text].T)
+        #phi[:,:] += matrix_multiply(axis_sum(eta * phi_minus_n, axis=1).T, right_eta_times_const)
+        phi[:,:] += np.dot(np.matrix(np.dot(phi_minus_n, eta)).T, np.matrix(right_eta_times_const))
         phi[:,:] += const
         phi[:,:] = np.exp(phi[:,:])
         row_normalize(phi)

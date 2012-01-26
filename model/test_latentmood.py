@@ -9,6 +9,14 @@ def same(a, b):
     assert a.shape == b.shape
     return np.all(np.abs(a-b) < 0.00000001)
 
+
+def test_log_row_normalize():
+    m = np.log(np.array([[2,2,4], [3,2,1]]))
+    answer = np.log(np.array([[0.25, 0.25, 0.5], [0.5, 0.333333333333333, 0.166666666666667]]))
+    out = lm.log_row_normalize(m)
+    assert same(out, answer)
+
+
 def test_dirichlet_expectation():
     alpha = np.array([3,4,5])
     out = lm.dirichlet_expectation(alpha)
@@ -53,14 +61,18 @@ def test_initialize_random():
 
 def test_elbo_did_not_converge():
     # non-convergence
-    assert lm.elbo_did_not_converge(-10.0, -20.0, 0.00001)
-    assert lm.elbo_did_not_converge(-10.0, -11.0, 0.00001)
-    assert lm.elbo_did_not_converge(-10.0, lm.INITIAL_ELBO, 0.00001)
-    assert lm.elbo_did_not_converge(lm.INITIAL_ELBO, lm.INITIAL_ELBO, 0.00001)
-    assert lm.elbo_did_not_converge(lm.INITIAL_ELBO, 0, 0.00001)
+    assert lm.elbo_did_not_converge(-10.0, -20.0, 1, 0.00001)
+    assert lm.elbo_did_not_converge(-10.0, -11.0, 1, 0.00001)
+    assert lm.elbo_did_not_converge(-10.0, lm.INITIAL_ELBO, 1, 0.00001)
+    assert lm.elbo_did_not_converge(lm.INITIAL_ELBO, lm.INITIAL_ELBO, 1, 0.00001)
+    assert lm.elbo_did_not_converge(lm.INITIAL_ELBO, 0, 1, 0.00001)
 
-    assert not lm.elbo_did_not_converge(-10.0, -10.0, 0.00001)
-    assert not lm.elbo_did_not_converge(-10.0000000001, -10.0, 0.00001)
+    assert not lm.elbo_did_not_converge(-10.0, -11.0, 100, 0.00001)
+    assert lm.elbo_did_not_converge(-10.0, -11.0, 99, 0.00001, max_iter=100)
+    assert not lm.elbo_did_not_converge(-10.0, -11.0, 99, 0.00001, max_iter=99)
+
+    assert not lm.elbo_did_not_converge(-10.0, -10.0, 1, 0.00001)
+    assert not lm.elbo_did_not_converge(-10.0000000001, -10.0, 1, 0.00001)
 
 def test_iterwords():
     doc0 = [(0,3), (1,1)]
@@ -130,15 +142,18 @@ def test_calculate_big_phi():
     a = np.ones((2,3))
     b = np.ones((6,4))
 
+    a[0, 2] = 5
+    b[4,1] = 8
+
     out = lm.calculate_big_phi(a, b)
     answer = np.array([
+                       [1, 1, 5, 0, 0, 0, 0,],
                        [1, 1, 1, 0, 0, 0, 0,],
-                       [1, 1, 1, 0, 0, 0, 0,],
                        [0, 0, 0, 1, 1, 1, 1,],
                        [0, 0, 0, 1, 1, 1, 1,],
                        [0, 0, 0, 1, 1, 1, 1,],
                        [0, 0, 0, 1, 1, 1, 1,],
-                       [0, 0, 0, 1, 1, 1, 1,],
+                       [0, 0, 0, 1, 8, 1, 1,],
                        [0, 0, 0, 1, 1, 1, 1,],
                       ])
     assert same(out, answer)
@@ -176,14 +191,18 @@ def test_calculate_EZZT():
 
     # now try a harder random matrix
     r1 = answer.copy()
-    r1[0,4] = 5
-    r1[1,3] = 9
+    r1[0,0] = 5
+    r1[1,1] = 9
+    r1 = lm.row_normalize(r1)
     r2 = r1.copy()
-    r1[2,1] = 2
+    r1[1,1] = 2
+    r1[1,0] = 1
+    r1 = lm.row_normalize(r1)
+
     big_phi = lm.calculate_big_phi(r1, r2)
     answer = lm.calculate_EZZT(big_phi)
     out = lm.calculate_EZZT_from_small_phis(r1, r2)
-    return same(out, answer)
+    assert same(out, answer)
 
 def test_update_gamma_lda_E_step():
     K = 3
@@ -266,6 +285,7 @@ def test_update_phi_lda_E_step():
     out = phi.copy()
     docarray = lm.doc_to_array([(0,1), (1,1)])
     lm.update_phi_lda_E_step(docarray, out, gamma, beta, y_d, eta, sigma_squared)
+    
     assert same(out, fast_answer)
 
 def test_elbo():
