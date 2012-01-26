@@ -13,6 +13,11 @@ def same(a, b):
 def test_log_row_normalize():
     m = np.log(np.array([[2,2,4], [3,2,1]]))
     answer = np.log(np.array([[0.25, 0.25, 0.5], [0.5, 0.333333333333333, 0.166666666666667]]))
+
+    assert abs(lm.logsum(m[0,:]) - np.log(8)) < .0000000001
+    assert abs(lm.logsum(m[1,:]) - np.log(6)) < .0000000001
+    assert abs(lm.logsum(answer[0,:])) < .0000000001
+
     out = lm.log_row_normalize(m)
     assert same(out, answer)
 

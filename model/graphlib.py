@@ -139,6 +139,9 @@ INITIAL_ELBO = float('-inf')
 final_output = {}
 
 
+def logsum(a):
+    """Same as sum, but in log space."""
+    return np.logaddexp.reduce(a)
 
 def log_row_normalize(m):
     """Does row-normalize in log space.
@@ -192,6 +195,7 @@ def initialize_beta(num_topics, num_words):
     
     # todo: jperla: do I need to normalize? 
     # otherwise word prob doesn't sum to 1?!
+    beta = row_normalize(beta)
 
     # for now, just initialize uniformly because we do not have numpypy.random.gamma
     #beta = np.ones((num_topics, num_words)) * (1.0 / num_words)
