@@ -14,9 +14,9 @@ def test_log_row_normalize():
     m = np.log(np.array([[2,2,4], [3,2,1]]))
     answer = np.log(np.array([[0.25, 0.25, 0.5], [0.5, 0.333333333333333, 0.166666666666667]]))
 
-    assert abs(lm.logsum(m[0,:]) - np.log(8)) < .0000000001
-    assert abs(lm.logsum(m[1,:]) - np.log(6)) < .0000000001
-    assert abs(lm.logsum(answer[0,:])) < .0000000001
+    assert abs(lm.logsumexp(m[0,:]) - np.log(8)) < .0000000001
+    assert abs(lm.logsumexp(m[1,:]) - np.log(6)) < .0000000001
+    assert abs(lm.logsumexp(answer[0,:])) < .0000000001
 
     out = lm.log_row_normalize(m)
     assert same(out, answer)
@@ -46,10 +46,22 @@ def test_initialize_beta():
     sumrows = np.sum(out, axis=1)
     assert same(sumrows, np.ones(out.shape[0]))
 
+    # test the log version
+    out = lm.initialize_log_beta(3, 4)
+    assert out.shape == (3,4)
+
+    sumrows = lm.logsumexp(out, axis=1)
+    assert same(np.exp(sumrows), np.ones(out.shape[0]))
+
 def test_initialize_uniform():
     m = np.ones((4,5))
     out = lm.initialize_uniform(m)
     answer = np.ones((4,5)) * 0.20
+    assert same(out, answer)
+
+    m = np.ones((4,5))
+    out = lm.initialize_log_uniform(m)
+    answer = np.log(np.ones((4,5)) * 0.20)
     assert same(out, answer)
 
 def test_initialize_random():
@@ -62,6 +74,17 @@ def test_initialize_random():
 
     sumrows = np.sum(out, axis=1)
     assert same(sumrows, np.ones(out.shape[0]))
+
+    # now test log of the same
+    original = np.ones((4,7))
+    out = original.copy()
+    lm.initialize_log_random(out)
+    assert original.shape == out.shape
+
+    assert not same(out, original)
+
+    sumrows = lm.logsumexp(out, axis=1)
+    assert same(np.exp(sumrows), np.ones(out.shape[0]))
 
 
 def test_elbo_did_not_converge():
@@ -143,6 +166,17 @@ def test_recalculate_beta():
     assert not same(beta, out)
     assert same(out, answer)
 
+
+    # test log space
+    log_out = np.log(out)
+    log_phi = [np.log(p) for p in phi]
+    assert log_out.shape == (2,3)
+    lm.recalculate_log_beta(text, log_out, log_phi)
+    assert log_out.shape == (2,3)
+
+    assert not same(beta, np.exp(log_out))
+    assert same(np.exp(log_out), answer)
+
 def test_calculate_big_phi():
     a = np.ones((2,3))
     b = np.ones((6,4))
@@ -165,6 +199,11 @@ def test_calculate_big_phi():
 
 phi1 = [lm.row_normalize(np.ones((2,3))), ]
 phi2 = [lm.row_normalize(np.ones((3,2))), ]
+log_phi1, log_phi2 = np.log(phi1[0]), np.log(phi2[0])
+
+def test_logdot():
+    log_phi1, log_phi2 = np.log(phi1[0]), np.log(phi2[0])
+    assert same(np.dot(phi1[0], phi2[0]), np.exp(lm.logdotexp(log_phi1, log_phi2)))
 
 def test_calculate_EZ():
     big_phi = lm.calculate_big_phi(phi1[0], phi2[0])
@@ -174,6 +213,14 @@ def test_calculate_EZ():
 
     out = lm.calculate_EZ_from_small_phis(phi1[0], phi2[0])
     assert same(out, answer)
+
+    # now test log phis
+    big_log_phi = lm.calculate_big_log_phi(log_phi1, log_phi2)
+    out = lm.calculate_EZ_from_big_log_phi(big_log_phi)
+    assert same(out, np.log(answer))
+
+    out = lm.calculate_EZ_from_small_log_phis(log_phi1, log_phi2)
+    assert same(out, np.log(answer))
 
 def test_calculate_EZZT():
     big_phi = lm.calculate_big_phi(phi1[0], phi2[0])
@@ -194,6 +241,10 @@ def test_calculate_EZZT():
     out = lm.calculate_EZZT_from_small_phis(phi1[0], phi2[0])
     assert same(out, answer)
 
+    # try it on logs
+    out = lm.calculate_EZZT_from_small_log_phis(log_phi1, log_phi2)
+    assert same(out, np.log(answer))
+
     # now try a harder random matrix
     r1 = answer.copy()
     r1[0,0] = 5
@@ -208,6 +259,10 @@ def test_calculate_EZZT():
     answer = lm.calculate_EZZT(big_phi)
     out = lm.calculate_EZZT_from_small_phis(r1, r2)
     assert same(out, answer)
+
+    # test out same anwer on logs
+    out = lm.calculate_EZZT_from_small_log_phis(np.log(r1), np.log(r2))
+    assert same(out, np.log(answer))
 
 def test_update_gamma_lda_E_step():
     K = 3
@@ -224,6 +279,12 @@ def test_update_gamma_lda_E_step():
 
     assert not same(out, gamma)
     assert same (out, answer)
+
+
+    out = np.log(gamma.copy())
+    lm.update_gamma_lda_E_step_from_log(np.log(alpha), np.log(phi), out)
+    assert not same(out, np.log(gamma))
+    assert same (out, np.log(answer))
 
 def test_doc_to_array():
     text = [(0,1), (1,1)]

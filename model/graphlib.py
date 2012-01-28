@@ -139,21 +139,20 @@ INITIAL_ELBO = float('-inf')
 final_output = {}
 
 
-def logsum(a):
-    """Same as sum, but in log space."""
-    return np.logaddexp.reduce(a)
+def logsumexp(a, axis=0):
+    """Same as sum, but in log space. Compare to logaddexp."""
+    return np.logaddexp.reduce(a, axis)
 
 def log_row_normalize(m):
     """Does row-normalize in log space.
         All values in m are log probabilities.
     """
     assert len(m.shape) == 2
-    lognorm = np.logaddexp.reduce(m, axis=1)
-    lognorm.shape = (lognorm.shape[0],1)
+    lognorm = logsumexp(m, axis=1)
+    lognorm.shape = (lognorm.shape[0], 1)
+
     m -= lognorm
     return m
-
-
 
 def dirichlet_expectation(alpha):
     """
@@ -182,24 +181,25 @@ def row_normalize(matrix):
         np.divide(matrix, np.matrix(rowsums).T, matrix)
     return matrix
 
+def initialize_log_beta(num_topics, num_words):
+    """Initializes beta randomly using a random dirichlet.
+        Accepts integers number of topics, and number of words in vocab.
+        Returns a TxW matrix which have the probabilities of word
+            distributions.  Exp of each row sums to 1.
+    """
+    l = 1*np.random.gamma(100., 1./100., (num_topics, num_words))
+    Elogbeta = dirichlet_expectation(l)
+    beta = log_row_normalize(Elogbeta)
+    return beta
+
 def initialize_beta(num_topics, num_words):
     """Initializes beta randomly using a random dirichlet.
         Accepts integers number of topics, and number of words in vocab.
         Returns a TxW matrix which have the probabilities of word
             distributions.  Each row sums to 1.
     """
-    
-    l = 1*np.random.gamma(100., 1./100., (num_topics, num_words))
-    Elogbeta = dirichlet_expectation(l)
-    beta = np.exp(Elogbeta)
-    
-    # todo: jperla: do I need to normalize? 
-    # otherwise word prob doesn't sum to 1?!
-    beta = row_normalize(beta)
-
-    # for now, just initialize uniformly because we do not have numpypy.random.gamma
-    #beta = np.ones((num_topics, num_words)) * (1.0 / num_words)
-    return beta
+    log_beta = initialize_log_beta(num_topics, num_words)
+    return np.exp(log_beta)
 
 def initialize_uniform(matrix):
     """Accepts a matrix with a defined shape.
@@ -209,6 +209,14 @@ def initialize_uniform(matrix):
     """
     nrows,ncols = matrix.shape
     matrix = np.ones(matrix.shape)*(1.0/ncols)
+    return matrix
+
+def initialize_log_uniform(matrix):
+    """Returns log of initialize_uniform."""
+    if len(matrix.shape) == 1:
+        matrix[:] = np.log(initialize_uniform(matrix))
+    else:
+        matrix[:,:] = np.log(initialize_uniform(matrix))
     return matrix
 
 def random_sample(shape):
@@ -227,8 +235,17 @@ def initialize_random(matrix):
         matrix[:,:] = random_sample(matrix.shape)
         row_normalize(matrix)
     else:
+        # one-dimensional array
         matrix[:] = random_sample(matrix.shape)
         matrix[:] = matrix / sum(matrix)
+    return matrix
+
+def initialize_log_random(matrix):
+    """Returns log of initialize_random."""
+    if len(matrix.shape) == 1:
+        matrix[:] = np.log(initialize_random(matrix))
+    else:
+        matrix[:,:] = np.log(initialize_random(matrix))
     return matrix
 
 def elbo_did_not_converge(elbo, last_elbo, num_iter=0, 
@@ -259,13 +276,13 @@ def recalculate_beta(text, beta, phi):
     update topics: βk,wnew ∝ ΣdΣn 1(wd,n = w) φkd,n
 
     Accepts beta matrix (KxW) and 
-        phi, a dictionary of (N x K) matrices.
+        phi, a D-length list of (N x K) matrices.
     """
      # todo: logarithms?
     (K,W) = beta.shape
     D = len(phi)
-    beta[:,:] = np.zeros(beta.shape)
-    
+    beta[:,:] = np.zeros(beta.shape)    
+
     if isinstance(text[0], np.ndarray):
         for d in xrange(D):
             for n,word in enumerate(text[d]):
@@ -279,6 +296,33 @@ def recalculate_beta(text, beta, phi):
     row_normalize(beta)
     return beta
 
+def recalculate_log_beta(text, log_beta, log_phi):
+    """
+    update topics: βk,wnew ∝ ΣdΣn 1(wd,n = w) φkd,n
+
+    Accepts log beta matrix (KxW) and 
+        log phi, a D-length list of (N x K) matrices.
+    """
+     # todo: logarithms?
+    (K,W) = log_beta.shape
+    D = len(log_phi)
+
+    # todo: jperla: should use -inf or a different really small number?!
+    log_beta[:,:] = np.ones(log_beta.shape) * float('-300')
+    
+    if isinstance(text[0], np.ndarray):
+        for d in xrange(D):
+            for n,word in enumerate(text[d]):
+                for k in xrange(K):
+                    log_beta[k,word] = np.logaddexp(log_beta[k,word], log_phi[d][n][k])
+    else:
+        for d in xrange(D):
+            for n,word,count in iterwords(text[d]):
+                for k in xrange(K):
+                    log_beta[k,word] = np.logaddexp(log_beta[k,word], log_phi[d][n][k])
+    log_row_normalize(log_beta)
+    return log_beta
+
 
 def calculate_big_phi(phi1, phi2):
     """ Pretends that two separate sets of D phi matrices (Nd x K) each
@@ -291,6 +335,21 @@ def calculate_big_phi(phi1, phi2):
     (n1, k1) = phi1.shape
     (n2, k2) = phi2.shape
     big_phi = np.zeros((n1 + n2, k1 + k2))
+    big_phi[0:n1,0:k1] = phi1
+    big_phi[n1:n1+n2,k1:k1+k2] = phi2
+    return big_phi
+
+def calculate_big_log_phi(phi1, phi2):
+    """ Pretends that two separate sets of D phi matrices (Nd x K) each
+        are one big phi matrix.
+        This is needed for the latent model.
+        The trick is to make a big matrix with four quadrants.
+        The top left quadrant has the phi1 matrix, the bottom right has phi2.
+        The remaining two quadrants are filled with zeros.
+    """
+    (n1, k1) = phi1.shape
+    (n2, k2) = phi2.shape
+    big_phi = np.ones((n1 + n2, k1 + k2)) * float('-1000')
     big_phi[0:n1,0:k1] = phi1
     big_phi[n1:n1+n2,k1:k1+k2] = phi2
     return big_phi
@@ -342,7 +401,6 @@ def recalculate_eta_sigma(eta, y, phi1, phi2):
     return new_sigma_squared
 
 
-# todo: can be made more efficient (look at structure of big phi)
 def calculate_EZ_from_small_phis(phi1, phi2):
     """
         Accepts a two small phi matrices (like (NdxK) and (NcxJ))
@@ -354,6 +412,18 @@ def calculate_EZ_from_small_phis(phi1, phi2):
     Ndc = phi1.shape[0] + phi2.shape[0]
     ez = np.concatenate((np.sum(phi1, axis=0), np.sum(phi2, axis=0)), axis=1)
     return ez / Ndc
+
+def calculate_EZ_from_small_log_phis(log_phi1, log_phi2):
+    """
+        Accepts a two small phi matrices (like (NdxK) and (NcxJ))
+        Calculates E[Zd].
+        Returns the final vector (K+J).
+
+        E[Z] = φ := (1/N)ΣNφn
+    """
+    Ndc = log_phi1.shape[0] + log_phi2.shape[0]
+    ez = np.concatenate((logsumexp(log_phi1, axis=0), logsumexp(log_phi2, axis=0)), axis=1)
+    return ez - np.log(Ndc)
     
 def calculate_EZ(big_phi):
     """
@@ -365,6 +435,37 @@ def calculate_EZ(big_phi):
     """
     Ndc,KJ = big_phi.shape
     return np.sum(big_phi, axis=0) / Ndc
+
+    
+def calculate_EZ_from_big_log_phi(big_log_phi):
+    """
+        Accepts a big phi matrix (like ((Nd+Nc) x (K+J))
+        Calculates E[Zd].
+        Returns the final vector (K+J).
+
+        E[Z] = φ := (1/N)ΣNφn
+    """
+    Ndc,KJ = big_log_phi.shape
+    return logsumexp(big_log_phi, axis=0) - np.log(Ndc)
+
+def logdotexp(a, b):
+    """Accepts two matrices a, b.
+        The matrices represent matrices with log probabilities.
+        Returns np.log(np.dot(np.exp(a), np.exp(b))).
+
+        Log of dot product of real probabilities.
+        Does all computations in log space.
+
+        Cmompare to np.dot().
+    """
+    (a1,a2) = a.shape
+    (b1,b2) = b.shape
+    assert a2 == b1
+    output = np.zeros((a1, b2))
+    for i in xrange(a1):
+        for j in xrange(b2):
+            output[i,j] = logsumexp([(x + y) for x,y in izip(a[i,:], b[:,j])])
+    return output
 
 def calculate_EZZT_from_small_phis(phi1, phi2):
     """
@@ -392,7 +493,6 @@ def calculate_EZZT_from_small_phis(phi1, phi2):
             m = np.dot(np.matrix(p2[:,i]), np.matrix(p2[:,j]).T)
             inner_sum[K+i,K+j] = np.sum(m) - np.sum(np.diag(m))
 
-
     for i in xrange(K):
         for j in xrange(J):
             m = np.dot(np.matrix(p1[:,i]), np.matrix(p2[:,j]).T)
@@ -409,6 +509,53 @@ def calculate_EZZT_from_small_phis(phi1, phi2):
     inner_sum += np.diag(big_phi_sum)
 
     inner_sum /= (Ndc * Ndc)
+    return inner_sum
+
+def calculate_EZZT_from_small_log_phis(phi1, phi2):
+    """
+        Accepts a big phi matrix (like ((Nd+Nc) x (K+J))
+        Calculates E[ZdZdT].
+        Returns the final matrix ((K+J) x (K+J)).
+
+        (Also, E[ZdZdT] = (1/N2)(ΣNΣm!=nφd,nφd,mT  +  ΣNdiag{φd,n})
+    """
+    Nd,K = phi1.shape
+    Nc,J = phi2.shape
+    (Ndc, KJ) = (Nd+Nc, K+J)
+    inner_sum = np.zeros((KJ, KJ))
+
+    p1 = np.matrix(phi1)
+    p2 = np.matrix(phi2)
+
+    for i in xrange(K):
+        for j in xrange(K):
+            m = logdotexp(np.matrix(p1[:,i]), np.matrix(p1[:,j]).T)
+            m += np.diag(np.ones(Nd) * -1000)
+            inner_sum[i,j] = logsumexp(m.flatten())
+
+    for i in xrange(J):
+        for j in xrange(J):
+            m = logdotexp(np.matrix(p2[:,i]), np.matrix(p2[:,j]).T)
+            m += np.diag(np.ones(Nc) * -1000)
+            inner_sum[K+i,K+j] = logsumexp(m.flatten())
+
+    for i in xrange(K):
+        for j in xrange(J):
+            m = logdotexp(np.matrix(p1[:,i]), np.matrix(p2[:,j]).T)
+            inner_sum[i,K+j] = logsumexp(m.flatten())
+
+    for i in xrange(J):
+        for j in xrange(K):
+            m = logdotexp(np.matrix(p2[:,i]), np.matrix(p1[:,j]).T)
+            inner_sum[K+i,j] = logsumexp(m.flatten())
+
+    big_phi_sum = np.concatenate((logsumexp(phi1, axis=0),
+                                  logsumexp(phi2, axis=0)), axis=1)
+    assert big_phi_sum.shape == (KJ,)
+    for i in xrange(KJ):
+        inner_sum[i,i] = logsumexp([inner_sum[i,i], big_phi_sum[i]])
+
+    inner_sum -= np.log(Ndc * Ndc)
     return inner_sum
 
 def calculate_EZZT(big_phi):
@@ -468,6 +615,14 @@ def update_gamma_lda_E_step(alpha, phi, gamma):
     return gamma
 
 
+def update_gamma_lda_E_step_from_log(log_alpha, log_phi, log_gamma):
+    """
+     Same as update_gamma_lda_E_step, 
+        but in log probability space.
+    """
+    assert log_phi.shape[1] == len(log_gamma)
+    log_gamma[:] = logsumexp([log_alpha, logsumexp(log_phi, axis=0)], axis=0)
+    return log_gamma
 
 
 def _unoptimized_update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
@@ -564,6 +719,49 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
         phi[:,:] += const
         phi[:,:] = np.exp(phi[:,:])
         row_normalize(phi)
+    else:
+        # otherwise, iterate through each word
+        for n,word,count in iterwords(text):
+            phi_sum -= phi[n]
+
+            pB = np_log(beta[:,word])
+            pD = (np.dot(eta, phi_sum) * right_eta_times_const) 
+
+            # must exponentiate and normalize immediately!
+            phi[n,:] = np.exp(pB + pD + const)
+            phi[n,:] /= np.sum(phi[n,:])
+
+            # add this back into the sum
+            # unlike in LDA, this cannot be computed in parallel
+            phi_sum += phi[n]
+    return phi
+
+def update_log_phi_lda_E_step(text, log_phi, log_gamma, log_beta, y_d, eta, sigma_squared):
+    """
+        Same as update_phi_lda_E_step but in log probability space.
+    """
+    (N, K) = log_phi.shape
+
+    log_phi_sum = logsum(log_phi, axis=0)
+    Ns = (N * sigma_squared)
+    ElogTheta = dirichlet_expectation(np.exp(log_gamma))
+
+    front = (-1.0 / (2 * N * Ns))
+    pC = (1.0 * y_d / Ns * eta)  
+    eta_dot_eta = front * (eta * eta)
+    const = ElogTheta + pC + eta_dot_eta
+
+    right_eta_times_const = (front * 2 * eta)
+
+    if isinstance(text, np.ndarray):
+        # if text is in array form, do an approximate fast matrix update
+        log_phi_minus_n = -1 + (logsumexp([log_phi, (-1 + log_phi_sum)]))
+        phi[:,:] = log_beta[:,text].T
+
+        phi[:,:] = logsumexp(phi[:,:], logdotexp(np.matrix(logdotexp(log_phi_minus_n, np.log(eta))).T, np.matrix(np.log(right_eta_times_const))))
+        phi[:,:] = logsumexp(phi[:,:], np.log(const))
+
+        log_row_normalize(phi)
     else:
         # otherwise, iterate through each word
         for n,word,count in iterwords(text):
