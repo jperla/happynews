@@ -102,7 +102,7 @@ class SupervisedLDAVars(graphlib.GraphVars):
 
         # give at least more documents than topics
         # so that it's not singular
-        assert var.D > K
+        assert self.D > K
 
         self.K = K
 
@@ -112,26 +112,24 @@ class SupervisedLDAVars(graphlib.GraphVars):
         # "it suffices to fix alpha to uniform 1/K"
         # initialize to ones so that the topics are more evenly distributed
         # good for small datasets
-        self.alpha = np.ones((K,)) * (3.0 / K)
+        self.alpha = np.ones((K,)) * (1.0 / K)
 
         # Initialize the variational distribution q(beta|lambda)
         self.beta = topiclib.initialize_beta(K, W)
 
-        # calculate number of words per document/comment
-        document_Nds = [sum(w[1] for w in d) for d in self.documents]
-
+        document_Nds = self.num_words_per(self.documents)
         self.phi = [(np.ones((document_Nds[d], K))*(1.0/K)) for d in xrange(D)]
 
         self.gamma = np.ones((D, K)) * (1.0 / K)
         graphlib.initialize_random(self.gamma)
 
-        self.eta = graphlib.random_normal(2.5, 3.0, (K,))
-        self.sigma_squared = 3.0
+        self.eta = graphlib.random_normal(0, 2.0, (K,))
+        self.sigma_squared = 0.5
 
         # EXPERIMENT
         # Let's initialize eta so that it agrees with y at start
         # hopefully this will keep y closer to gaussian centered at 0
-        topiclib.slda_recalculate_eta_sigma(self.eta, self.y, self.phi)
+        #topiclib.slda_recalculate_eta_sigma(self.eta, self.y, self.phi)
 
         print 'eta start: {0}'.format(self.eta)
 
@@ -191,27 +189,36 @@ if __name__=='__main__':
                  5,
                  4.2
                 ])
-    test_data = ([
+    test_data = (
+                [
                  [(0,1), (2,2), (3,1), (4,1),],
                  [(0,1), (2,1), (3,2), (4,3),],
                  [(0,1), (2,3), (3,3), (4,1),],
                  [(5,1), (6,2), (8,1), (9,3),],
                  [(5,1), (6,2), (8,1), (9,1),],
                  [(5,2), (6,1), (8,1), (9,1),],
-                 ],
-                 [
+                ],
+                [
                  1.7,
                  2.0,
                  1.2,
                  4.8,
                  5,
-                 4.2
+                 4.2,
                 ])
 
     
-    var = SupervisedLDAVars(test_data, K=3)
-    var = SupervisedLDAVars(noisy_test_data, K=3)
-    #var = SupervisedLDAVars(real_data, K=20)
+    #var = SupervisedLDAVars(test_data, K=3)
+    #var = SupervisedLDAVars(noisy_test_data, K=3)
+
+
+
+    # use my big generated dataset
+    labeled_documents = topiclib.read_sparse('synthtlc/labeled.dat')
+    y = np.loadtxt('synthtlc/yL.npy')
+    real_data = (labeled_documents, y)
+
+    var = SupervisedLDAVars(real_data, K=25)
 
     try:
         output = run_slda(var)

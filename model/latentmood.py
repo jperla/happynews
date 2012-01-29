@@ -113,7 +113,7 @@ class LatentMoodVars(graphlib.GraphVars):
 
         # give at least more documents than topics
         # so that it's not singular
-        assert var.D > (K+J)
+        assert self.D > (K+J)
 
         self.K = K
         self.J = J
@@ -132,9 +132,8 @@ class LatentMoodVars(graphlib.GraphVars):
         self.betaC = topiclib.initialize_beta(J, W)
 
         # calculate number of words per document/comment
-        document_Nds = [sum(w[1] for w in d) for d in self.documents]
-        comment_Nds = [sum(w[1] for w in c) for c in self.comments]
-
+        document_Nds = self.num_words_per(self.documents)
+        comment_Nds = self.num_words_per(self.comments)
         self.phiD = [(np.ones((document_Nds[d], K))*(1.0/K)) for d in xrange(D)]
         self.phiC = [(np.ones((comment_Nds[d], J))*(1.0/J)) for d in xrange(D)]
 
@@ -253,11 +252,9 @@ if __name__=='__main__':
     '''
 
     
-    var = LatentMoodVars()
-    var.set_documents(test_data)
-    #var.set_documents(real_data)
-    var.initialize(K=2, J=3)
-    var.optimize_documents()
+    var = LatentMoodVars(test_data, K=2, J=3)
+    var = LatentMoodVars(noisy_test_data, K=2, J=3)
+    #var = LatentMoodVars(real_data, K=2, J=3)
 
     try:
         output = run_latent_mood(var)

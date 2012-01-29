@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from itertools import izip,repeat
+from itertools import repeat
 
 try:
     import numpy as np
@@ -17,6 +17,7 @@ except ImportError:
 
 import graphlib
 from graphlib import logsumexp
+from graphlib import logdotexp
 from graphlib import row_normalize
 from graphlib import log_row_normalize
 from graphlib import np_log
@@ -48,7 +49,6 @@ def lda_recalculate_beta(text, beta, phi):
     Accepts beta matrix (KxW) and 
         phi, a D-length list of (N x K) matrices.
     """
-     # todo: logarithms?
     (K,W) = beta.shape
     D = len(phi)
     beta[:,:] = np.zeros(beta.shape)    
@@ -73,12 +73,11 @@ def lda_recalculate_log_beta(text, log_beta, log_phi):
     Accepts log beta matrix (KxW) and 
         log phi, a D-length list of (N x K) matrices.
     """
-     # todo: logarithms?
     (K,W) = log_beta.shape
     D = len(log_phi)
 
     # todo: jperla: should use -inf or a different really small number?!
-    log_beta[:,:] = np.ones(log_beta.shape) * float('-300')
+    log_beta[:,:] = np.ones(log_beta.shape) * float('-1000')
     
     if isinstance(text[0], np.ndarray):
         for d in xrange(D):
@@ -267,25 +266,6 @@ def calculate_EZ_from_big_log_phi(big_log_phi):
     Ndc,KJ = big_log_phi.shape
     return logsumexp(big_log_phi, axis=0) - np.log(Ndc)
 
-def logdotexp(a, b):
-    """Accepts two matrices a, b.
-        The matrices represent matrices with log probabilities.
-        Returns np.log(np.dot(np.exp(a), np.exp(b))).
-
-        Log of dot product of real probabilities.
-        Does all computations in log space.
-
-        Cmompare to np.dot().
-    """
-    (a1,a2) = a.shape
-    (b1,b2) = b.shape
-    assert a2 == b1
-    output = np.zeros((a1, b2))
-    for i in xrange(a1):
-        for j in xrange(b2):
-            output[i,j] = logsumexp([(x + y) for x,y in izip(a[i,:], b[:,j])])
-    return output
-
 def calculate_EZZT_from_small_phis(phi1, phi2):
     """
         Accepts a big phi matrix (like ((Nd+Nc) x (K+J))
@@ -407,6 +387,7 @@ def calculate_E_ATA_inverse(phi):
     N,K = phi[0].shape
     E_ATA = sum(calculate_EZZT(phi[d]) for d in xrange(D))
     assert E_ATA.shape == (K, K)
+
     # todo: does not work in pypy
     return np.linalg.inv(E_ATA)
 
@@ -424,11 +405,8 @@ def calculate_E_ATA_inverse_from_small_phis(phi1, phi2):
     E_ATA = sum(calculate_EZZT_from_small_phis(phi1[d], phi2[d]) for d in xrange(D))
     assert E_ATA.shape == (KJ, KJ)
 
-    if graphlib.ispypy():
-        # todo: this is massively broken!!!
-        return np.diag(np.ones((KJ,)))
-    else:
-        return np.linalg.inv(E_ATA)
+    # todo: this does not work in pypy
+    return np.linalg.inv(E_ATA)
 
 def lda_update_gamma(alpha, phi, gamma):
     """
@@ -636,13 +614,13 @@ def slda_local_elbo(document, y, alpha, beta, gamma, phi, eta, sigma_squared):
     The last terms are for the y, and for the entropy of q.
     """
     elbo = 0.0
-    #print 'elbo lda terms...'
+    print 'elbo lda terms...'
     elbo += lda_elbo_terms(document, alpha, beta, gamma, phi)
 
-    #print 'elbo slda y...'
+    print 'elbo slda y...'
     elbo += slda_elbo_y(y, eta, phi, sigma_squared)
 
-    #print 'elbo entropy...'
+    print 'elbo entropy...'
       # todo: is it just the same as lda??
     elbo += lda_elbo_entropy(gamma, phi)
     return elbo
@@ -713,7 +691,9 @@ def slda_E_step_for_doc(global_iteration,
             print 'will calculate elbo...'
             # calculate new ELBO
             last_local_elbo = local_elbo
-            local_elbo = slda_local_elbo(document, y, alpha, beta, gamma, phi, eta, sigma_squared)
+            local_elbo = slda_local_elbo(document, y, 
+                                         alpha, beta, gamma, phi, 
+                                         eta, sigma_squared)
         i += 1
 
         #print {'beta': beta, 'gamma': gamma, 'phi': phi, 'y': y, 'eta': eta}
@@ -885,9 +865,13 @@ def slda_elbo_y(y, eta, phi, sigma_squared):
     ss = sigma_squared
     elbo += (-0.5) * np_log(2 * np.pi * ss)
     
+    print 'will calculate ez...'
     ez = calculate_EZ(phi)
+    print 'will calculate ezzt...'
     ezzt = calculate_EZZT(phi)
+    print 'will calculate nEZZTn...'
     nEZZTn = np.dot(np.dot(eta, ezzt), eta)
+    print 'will sum up elbo...'
     elbo += (-0.5 / ss) * (y*y - (2 * y * np.dot(eta, ez)) + nEZZTn)
     return elbo
     
@@ -937,3 +921,18 @@ def lm_global_elbo(documents, comments, alphaD, alphaC, betaD, betaC, gammaD, ga
         Helps you know when convergence happens.
     """
     return np.sum(lm_local_elbo(documents[d], comments[d], alphaD, alphaC, betaD, betaC, gammaD[d], gammaC[d], phiD[d], phiC[d], y[d], eta, sigma_squared) for d in xrange(len(documents)))
+
+def read_sparse(filename):
+    """Accepts filename.
+        Reads in sparse data in wordid:count form, 
+        one line is one doc.
+    """
+    docs = []
+    with open(filename, 'r') as f:
+        for l in f.readlines():
+            line = l.strip('\r\n ')
+            if line != '':
+                doc = [(int(w.split(':')[0]),int(w.split(':')[1])) 
+                            for w in line.split(' ')]
+                docs.append(doc)
+    return docs

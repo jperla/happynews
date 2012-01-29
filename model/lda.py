@@ -102,7 +102,7 @@ class LDAVars(graphlib.GraphVars):
         # Initialize the variational distribution q(beta|lambda)
         self.beta = topiclib.initialize_beta(K, W)
 
-        document_Nds = self.num_words_per_document()
+        document_Nds = self.num_words_per(self.documents)
         self.phi = [(np.ones((document_Nds[d], K))*(1.0/K)) for d in xrange(D)]
 
         self.gamma = np.ones((D, K)) * (1.0 / K)
@@ -122,9 +122,7 @@ def lda_e_step(global_iterations, v):
     return local_i
 
 def lda_m_step(var):
-    ### M-step: ###
     print 'updating betas..'
-    # update betaD for documents first
     topiclib.lda_recalculate_beta(var.documents, var.beta, var.phi)
 
 def lda_print_func(var):
