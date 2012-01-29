@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import graphlib as lm
+
+import topiclib as lm
+import graphlib
 
 def same(a, b):
     print a
@@ -24,19 +26,19 @@ def test_log_row_normalize():
 
 def test_dirichlet_expectation():
     alpha = np.array([3,4,5])
-    out = lm.dirichlet_expectation(alpha)
+    out = graphlib.dirichlet_expectation(alpha)
     answer = np.array([-1.51987734, -1.18654401154, -0.93654401154401])
     assert same(out, answer)
 
 def test_row_normalize():
     t = np.ones((3,4))
-    out = lm.row_normalize(t)
+    out = graphlib.row_normalize(t)
     answer = np.ones(t.shape) * 0.25
     assert same(out, answer)
 
     a = np.array([[ 0.75      ,  0.        ,  0.25      ],
                   [ 0.16666667,  0.66666667,  0.16666667]])
-    lm.row_normalize(a)
+    graphlib.row_normalize(a)
     assert a.shape == (2, 3)
 
 def test_initialize_beta():
@@ -55,19 +57,19 @@ def test_initialize_beta():
 
 def test_initialize_uniform():
     m = np.ones((4,5))
-    out = lm.initialize_uniform(m)
+    out = graphlib.initialize_uniform(m)
     answer = np.ones((4,5)) * 0.20
     assert same(out, answer)
 
     m = np.ones((4,5))
-    out = lm.initialize_log_uniform(m)
+    out = graphlib.initialize_log_uniform(m)
     answer = np.log(np.ones((4,5)) * 0.20)
     assert same(out, answer)
 
 def test_initialize_random():
     original = np.ones((4,7))
     out = original.copy()
-    lm.initialize_random(out)
+    graphlib.initialize_random(out)
     assert original.shape == out.shape
 
     assert not same(out, original)
@@ -78,29 +80,30 @@ def test_initialize_random():
     # now test log of the same
     original = np.ones((4,7))
     out = original.copy()
-    lm.initialize_log_random(out)
+    graphlib.initialize_log_random(out)
     assert original.shape == out.shape
 
     assert not same(out, original)
 
-    sumrows = lm.logsumexp(out, axis=1)
+    sumrows = graphlib.logsumexp(out, axis=1)
     assert same(np.exp(sumrows), np.ones(out.shape[0]))
 
 
 def test_elbo_did_not_converge():
     # non-convergence
-    assert lm.elbo_did_not_converge(-10.0, -20.0, 1, 0.00001)
-    assert lm.elbo_did_not_converge(-10.0, -11.0, 1, 0.00001)
-    assert lm.elbo_did_not_converge(-10.0, lm.INITIAL_ELBO, 1, 0.00001)
-    assert lm.elbo_did_not_converge(lm.INITIAL_ELBO, lm.INITIAL_ELBO, 1, 0.00001)
-    assert lm.elbo_did_not_converge(lm.INITIAL_ELBO, 0, 1, 0.00001)
+    ib = graphlib.INITIAL_ELBO
+    assert graphlib.elbo_did_not_converge(-10.0, -20.0, 1, 0.00001)
+    assert graphlib.elbo_did_not_converge(-10.0, -11.0, 1, 0.00001)
+    assert graphlib.elbo_did_not_converge(-10.0, ib, 1, 0.00001)
+    assert graphlib.elbo_did_not_converge(ib, ib, 1, 0.00001)
+    assert graphlib.elbo_did_not_converge(ib, 0, 1, 0.00001)
 
-    assert not lm.elbo_did_not_converge(-10.0, -11.0, 100, 0.00001)
-    assert lm.elbo_did_not_converge(-10.0, -11.0, 99, 0.00001, max_iter=100)
-    assert not lm.elbo_did_not_converge(-10.0, -11.0, 99, 0.00001, max_iter=99)
+    assert not graphlib.elbo_did_not_converge(-10.0, -11.0, 100, 0.00001)
+    assert graphlib.elbo_did_not_converge(-10.0, -11.0, 99, 0.00001, max_iter=100)
+    assert not graphlib.elbo_did_not_converge(-10.0, -11.0, 99, 0.00001, max_iter=99)
 
-    assert not lm.elbo_did_not_converge(-10.0, -10.0, 1, 0.00001)
-    assert not lm.elbo_did_not_converge(-10.0000000001, -10.0, 1, 0.00001)
+    assert not graphlib.elbo_did_not_converge(-10.0, -10.0, 1, 0.00001)
+    assert not graphlib.elbo_did_not_converge(-10.0000000001, -10.0, 1, 0.00001)
 
 def test_iterwords():
     doc0 = [(0,3), (1,1)]
@@ -126,7 +129,7 @@ def test_iterwords():
              ]
     assert out2 == answer2
 
-def test_recalculate_beta():
+def test_lda_recalculate_beta():
     K = 2
     W = 3
 
@@ -160,7 +163,7 @@ def test_recalculate_beta():
                        [1.0/6, 2.0/3, 1.0/6]])
 
     assert out.shape == (2,3)
-    lm.recalculate_beta(text, out, phi)
+    lm.lda_recalculate_beta(text, out, phi)
     assert out.shape == (2,3)
 
     assert not same(beta, out)
@@ -171,7 +174,7 @@ def test_recalculate_beta():
     log_out = np.log(out)
     log_phi = [np.log(p) for p in phi]
     assert log_out.shape == (2,3)
-    lm.recalculate_log_beta(text, log_out, log_phi)
+    lm.lda_recalculate_log_beta(text, log_out, log_phi)
     assert log_out.shape == (2,3)
 
     assert not same(beta, np.exp(log_out))
@@ -264,7 +267,7 @@ def test_calculate_EZZT():
     out = lm.calculate_EZZT_from_small_log_phis(np.log(r1), np.log(r2))
     assert same(out, np.log(answer))
 
-def test_update_gamma_lda_E_step():
+def test_lda_update_gamma():
     K = 3
     phi = np.array([
                     [0.75, 0.25,   0],
@@ -274,7 +277,7 @@ def test_update_gamma_lda_E_step():
     alpha = np.array([0.3, 2.3, 0.8])
     gamma = np.zeros((K,))
     out = gamma.copy()
-    lm.update_gamma_lda_E_step(alpha, phi, out)
+    lm.lda_update_gamma(alpha, phi, out)
     answer = alpha + np.array([1.55, 0.55, 0.9])
 
     assert not same(out, gamma)
@@ -282,9 +285,9 @@ def test_update_gamma_lda_E_step():
 
 
     out = np.log(gamma.copy())
-    lm.update_gamma_lda_E_step_from_log(np.log(alpha), np.log(phi), out)
-    assert not same(out, np.log(gamma))
-    assert same (out, np.log(answer))
+    lm.lda_update_log_gamma(np.log(alpha), np.log(phi), out)
+    assert not same(np.exp(out), gamma)
+    assert same (np.exp(out), answer)
 
 def test_doc_to_array():
     text = [(0,1), (1,1)]
@@ -297,7 +300,7 @@ def test_doc_to_array():
     answer = np.array([1, 1, 1, 2, 2, 0])
     assert same(out, answer)
 
-def test_update_phi_lda_E_step():
+def test_slda_update_phi():
     gamma = np.array([3,4,5])
     text = [(0,1), (1,1)]
     beta = np.array([
@@ -340,7 +343,7 @@ def test_update_phi_lda_E_step():
     lm.row_normalize(answer)
 
     out = phi.copy()
-    lm.update_phi_lda_E_step(text, out, gamma, beta, y_d, eta, sigma_squared)
+    lm.slda_update_phi(text, out, gamma, beta, y_d, eta, sigma_squared)
     assert same(out, answer)
 
 
@@ -350,14 +353,14 @@ def test_update_phi_lda_E_step():
 
     out = phi.copy()
     docarray = lm.doc_to_array([(0,1), (1,1)])
-    lm.update_phi_lda_E_step(docarray, out, gamma, beta, y_d, eta, sigma_squared)
+    lm.slda_update_phi(docarray, out, gamma, beta, y_d, eta, sigma_squared)
     
     assert same(out, fast_answer)
 
 def test_elbo():
     # todo: calculate elbo terms
     # do one calculation
-    #lm.elbo_lda_terms(alphaD, gammaD, phiD, betaD, comment)
+    #lm.lda_elbo_terms(alphaD, gammaD, phiD, betaD, comment)
     #lm.elbo_slda_y(y, eta, big_phi, sigma_squared)
     #lm.elbo_entropy_lda(phiD, gammaD)
     pass

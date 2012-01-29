@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import math
-import random
+from itertools import izip,repeat
 
 try:
     import numpy as np
@@ -12,130 +11,15 @@ else:
     np.seterr(invalid='raise')
 
 try:
-    from scipy.special import psi
+    from scipy.special import gammaln
 except ImportError:
-    from scipypy import psi
+    from scipypy import gammaln
 
-
-def ensure(boolean, message=''):
-    """Wrapper for assert. Let's me turn it on/off globally."""
-    assert boolean, message
-
-INITIAL_ELBO = float('-inf')
-
-def logsumexp(a, axis=0):
-    """Same as sum, but in log space. Compare to logaddexp."""
-    return np.logaddexp.reduce(a, axis)
-
-def log_row_normalize(m):
-    """Does row-normalize in log space.
-        All values in m are log probabilities.
-    """
-    assert len(m.shape) == 2
-    lognorm = logsumexp(m, axis=1)
-    lognorm.shape = (lognorm.shape[0], 1)
-
-    m -= lognorm
-    return m
-
-def row_normalize(matrix):
-    """Accepts 2-D matrix.
-        Modifies matrix in place.   
-        Returns matrix with rows normalized.
-    """
-    nrows, ncols = matrix.shape
-    rowsums = axis_sum(matrix, axis=1)
-
-    if ispypy():
-        for i in xrange(len(rowsums)):
-            matrix[i] /= rowsums[i]
-    else:
-        np.divide(matrix, np.matrix(rowsums).T, matrix)
-    return matrix
-
-def initialize_uniform(matrix):
-    """Accepts a matrix with a defined shape.
-        Initializes it to to be uniform probability on row.
-        Each row on last dimension should sum to 1.
-        Returns the original matrix, modified.
-    """
-    nrows,ncols = matrix.shape
-    matrix = np.ones(matrix.shape)*(1.0/ncols)
-    return matrix
-
-def initialize_log_uniform(matrix):
-    """Returns log of initialize_uniform."""
-    if len(matrix.shape) == 1:
-        matrix[:] = np.log(initialize_uniform(matrix))
-    else:
-        matrix[:,:] = np.log(initialize_uniform(matrix))
-    return matrix
-
-def random_sample(shape):
-    a = np.zeros(shape)
-    for i in xrange(len(a)):
-        a[i] = random.random()
-    return row_normalize(a)
-
-def initialize_random(matrix):
-    """Accepts a matrix with a defined shape.
-        Initializes it to to random probabilities on row.
-        Each row on last dimension should sum to 1.
-        Returns the original matrix, modified.
-    """
-    if matrix.ndim == 2:
-        matrix[:,:] = random_sample(matrix.shape)
-        row_normalize(matrix)
-    else:
-        # one-dimensional array
-        matrix[:] = random_sample(matrix.shape)
-        matrix[:] = matrix / sum(matrix)
-    return matrix
-
-def initialize_log_random(matrix):
-    """Returns log of initialize_random."""
-    if len(matrix.shape) == 1:
-        matrix[:] = np.log(initialize_random(matrix))
-    else:
-        matrix[:,:] = np.log(initialize_random(matrix))
-    return matrix
-
-def elbo_did_not_converge(elbo, last_elbo, num_iter=0, 
-                          criterion=0.001, max_iter=20):
-    """Accepts two elbo doubles.  
-        Also accepts the number of iterations already performed in this loop.
-        Also accepts convergence criterion: 
-            (elbo - last_elbo) < criterion # True to stop
-        Finally, accepts 
-        Returns boolean.
-        Figures out whether the elbo is sufficiently smaller than
-            last_elbo.
-    """
-    if num_iter >= max_iter:
-        return False
-
-    if elbo == INITIAL_ELBO or last_elbo == INITIAL_ELBO:
-        return True
-    else:
-        # todo: do a criterion convergence test
-        if np.abs(elbo - last_elbo) < criterion:
-            return False
-        else:
-            return True
-
-
-def dirichlet_expectation(alpha):
-    """
-    From Matt Hoffman:
-    For a vector theta ~ Dir(alpha), computes E[log(theta)] given alpha.
-    """
-    #assert len(alpha.shape) == 1 # jperla: not sure what else it does
-    if (len(alpha.shape) == 1):
-        return(psi(alpha) - psi(np.sum(alpha)))
-    else:
-        return(psi(alpha) - psi(np.sum(alpha, 1))[:, np.newaxis])
-
-'''
+import graphlib
+from graphlib import logsumexp
+from graphlib import row_normalize
+from graphlib import log_row_normalize
+from graphlib import np_log
 
 def initialize_log_beta(num_topics, num_words):
     """Initializes beta randomly using a random dirichlet.
@@ -144,8 +28,8 @@ def initialize_log_beta(num_topics, num_words):
             distributions.  Exp of each row sums to 1.
     """
     l = 1*np.random.gamma(100., 1./100., (num_topics, num_words))
-    Elogbeta = dirichlet_expectation(l)
-    beta = log_row_normalize(Elogbeta)
+    Elogbeta = graphlib.dirichlet_expectation(l)
+    beta = graphlib.log_row_normalize(Elogbeta)
     return beta
 
 def initialize_beta(num_topics, num_words):
@@ -157,7 +41,7 @@ def initialize_beta(num_topics, num_words):
     log_beta = initialize_log_beta(num_topics, num_words)
     return np.exp(log_beta)
 
-def recalculate_beta(text, beta, phi):
+def lda_recalculate_beta(text, beta, phi):
     """
     update topics: βk,wnew ∝ ΣdΣn 1(wd,n = w) φkd,n
 
@@ -179,10 +63,10 @@ def recalculate_beta(text, beta, phi):
             for n,word,count in iterwords(text[d]):
                 for k in xrange(K):
                     beta[k,word] += phi[d][n][k]
-    row_normalize(beta)
+    graphlib.row_normalize(beta)
     return beta
 
-def recalculate_log_beta(text, log_beta, log_phi):
+def lda_recalculate_log_beta(text, log_beta, log_phi):
     """
     update topics: βk,wnew ∝ ΣdΣn 1(wd,n = w) φkd,n
 
@@ -206,7 +90,7 @@ def recalculate_log_beta(text, log_beta, log_phi):
             for n,word,count in iterwords(text[d]):
                 for k in xrange(K):
                     log_beta[k,word] = np.logaddexp(log_beta[k,word], log_phi[d][n][k])
-    log_row_normalize(log_beta)
+    graphlib.log_row_normalize(log_beta)
     return log_beta
 
 
@@ -241,7 +125,56 @@ def calculate_big_log_phi(phi1, phi2):
     return big_phi
 
 
-def recalculate_eta_sigma(eta, y, phi1, phi2):
+def slda_recalculate_eta_sigma(eta, y, phi):
+    """
+        Accepts eta (K)-size vector,
+            also y (a D-size vector of reals),
+            also a phi D-size vectors of NxK matrices.
+        Returns new sigma squared update (a double).
+
+        ηnew ← (E[ATA])-1 E[A]Ty
+        σ2new ← (1/D) {yTy - yTE[A]ηnew}
+
+        (Note that A is the D X (K + J) matrix whose rows are the vectors ZdT.)
+        (Also note that the dth row of E[A] is φd, and E[ATA] = Σd E[ZdZdT] .)
+        (Also, note that E[Z] = φ := (1/N)Σnφn, and E[ZdZdT] = (1/N2)(ΣnΣm!=nφd,nφd,mT  +  Σndiag{φd,n})
+    """
+    D = len(phi)
+    assert D >= 1
+
+    N,K = phi[0].shape
+
+    #print 'e_a...'
+    E_A = np.empty((D, K))
+    for d in xrange(D):
+        E_A[d,:] = calculate_EZ(phi[d])
+  
+    #print 'inverse...'
+    E_ATA_inverse = calculate_E_ATA_inverse(phi)
+
+    #print 'new eta...'
+    #new_eta = matrix_multiply(matrix_multiply(E_ATA_inverse, E_A.T), y)
+    new_eta = np.dot(np.dot(E_ATA_inverse, E_A.T), y)
+
+    '''
+     # not necessary anymore?
+    if np.sum(np.abs(new_eta)) > (KJ * KJ * 5):
+        print 'ETA is GOING CRAZY {0}'.format(eta)
+        print 'aborting the update!!!'
+    else:
+        eta[:] = new_eta
+    '''
+    eta[:] = new_eta
+    
+    # todo: don't do this later
+    # keep sigma squared fix
+    #import pdb; pdb.set_trace()
+    #new_sigma_squared = (1.0 / D) * (np.dot(y, y) - np.dot(np.dot(np.dot(np.dot(y, E_A), E_ATA_inverse), E_A.T), y))
+    new_sigma_squared = (1.0 / D) * (np.dot(y, y) - np.dot(np.dot(y, E_A), eta))
+    #new_sigma_squared = 1.0
+    return new_sigma_squared
+
+def lm_recalculate_eta_sigma(eta, y, phi1, phi2):
     """
         Accepts eta (K+J)-size vector,
             also y (a D-size vector of reals),
@@ -268,7 +201,7 @@ def recalculate_eta_sigma(eta, y, phi1, phi2):
         E_A[d,:] = calculate_EZ_from_small_phis(phi1[d], phi2[d])
   
     #print 'inverse...'
-    E_ATA_inverse = calculate_E_ATA_inverse(phi1, phi2)
+    E_ATA_inverse = calculate_E_ATA_inverse_from_small_phis(phi1, phi2)
 
     #print 'new eta...'
     #new_eta = matrix_multiply(matrix_multiply(E_ATA_inverse, E_A.T), y)
@@ -319,8 +252,8 @@ def calculate_EZ(big_phi):
 
         E[Z] = φ := (1/N)ΣNφn
     """
-    Ndc,KJ = big_phi.shape
-    return np.sum(big_phi, axis=0) / Ndc
+    N,K = big_phi.shape
+    return np.sum(big_phi, axis=0) / N
 
     
 def calculate_EZ_from_big_log_phi(big_log_phi):
@@ -446,33 +379,43 @@ def calculate_EZZT_from_small_log_phis(phi1, phi2):
 
 def calculate_EZZT(big_phi):
     """
-        Accepts a big phi matrix (like ((Nd+Nc) x (K+J))
+        Accepts a big phi matrix (like (N x K)
         Calculates E[ZdZdT].
-        Returns the final matrix ((K+J) x (K+J)).
+        Returns the final matrix (K x K).
 
         (Also, E[ZdZdT] = (1/N2)(ΣNΣm!=nφd,nφd,mT  +  ΣNdiag{φd,n})
     """
-    (Ndc, KJ) = big_phi.shape
-    inner_sum = np.zeros((KJ, KJ))
-    for n in xrange(Ndc):
-        for m in xrange(Ndc):
+    (N, K) = big_phi.shape
+    inner_sum = np.zeros((K, K))
+    for n in xrange(N):
+        for m in xrange(N):
             if n != m:
-                #new_matrix = matrix_multiply(big_phi[n].T, big_phi[m])
                 new_matrix = np.dot(np.matrix(big_phi[n]).T, np.matrix(big_phi[m]))
                 assert new_matrix.shape == inner_sum.shape
                 inner_sum += new_matrix
     inner_sum += np.diag(np.sum(big_phi, axis=0))
 
-    inner_sum /= (Ndc * Ndc)
+    inner_sum /= (N * N)
     return inner_sum
 
-def calculate_E_ATA_inverse(phi1, phi2):
+def calculate_E_ATA_inverse(phi):
     """Accepts number of documents, 
-        and a big_phi matrix of size (Nd + Nc, K + J).
+        and a big_phi matrix of size (N, K).
+        Returns a new matrix which is inverse of E([ATA]) of size (K,K).
+    """
+    D = len(phi)
+    N,K = phi[0].shape
+    E_ATA = sum(calculate_EZZT(phi[d]) for d in xrange(D))
+    assert E_ATA.shape == (K, K)
+    # todo: does not work in pypy
+    return np.linalg.inv(E_ATA)
+
+def calculate_E_ATA_inverse_from_small_phis(phi1, phi2):
+    """Accepts number of documents, 
+        and two small phi matrices of size (Nd,K) and (Nc,J).
         Returns a new matrix which is inverse of E([ATA]) of size (K+J,K+J).
 
         (Note that A is the D X (K + J) matrix whose rows are the vectors ZdT for document and comment concatenated.)
-        (Also note that the dth row of E[A] is φd, and E[ATA] = Σd E[ZdZdT] .)
     """
     D = len(phi1)
     Nd,K = phi1[0].shape
@@ -481,13 +424,13 @@ def calculate_E_ATA_inverse(phi1, phi2):
     E_ATA = sum(calculate_EZZT_from_small_phis(phi1[d], phi2[d]) for d in xrange(D))
     assert E_ATA.shape == (KJ, KJ)
 
-    if ispypy():
+    if graphlib.ispypy():
         # todo: this is massively broken!!!
-        return np_diag(np.ones((KJ,)))
+        return np.diag(np.ones((KJ,)))
     else:
         return np.linalg.inv(E_ATA)
 
-def update_gamma_lda_E_step(alpha, phi, gamma):
+def lda_update_gamma(alpha, phi, gamma):
     """
      Accepts:
         gamma and alpha are K-size vectors.
@@ -497,13 +440,13 @@ def update_gamma_lda_E_step(alpha, phi, gamma):
      update gamma: γnew ← α + Σnφn
     """
     assert phi.shape[1] == len(gamma)
-    gamma[:] = alpha + axis_sum(phi, axis=0)
+    gamma[:] = alpha + np.sum(phi, axis=0)
     return gamma
 
 
-def update_gamma_lda_E_step_from_log(log_alpha, log_phi, log_gamma):
+def lda_update_log_gamma(log_alpha, log_phi, log_gamma):
     """
-     Same as update_gamma_lda_E_step, 
+     Same as lda_update_gamma, 
         but in log probability space.
     """
     assert log_phi.shape[1] == len(log_gamma)
@@ -511,7 +454,7 @@ def update_gamma_lda_E_step_from_log(log_alpha, log_phi, log_gamma):
     return log_gamma
 
 
-def _unoptimized_update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
+def _unoptimized_slda_update_phi(text, phi, gamma, beta, y_d, eta, sigma_squared):
     """
         Update phi in LDA. 
         phi is N x K matrix.
@@ -530,9 +473,9 @@ def _unoptimized_update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_s
     #assert len(gamma) == K
     #assert beta.shape[0] == K
 
-    phi_sum = axis_sum(phi, axis=0)
+    phi_sum = np.sum(phi, axis=0)
     Ns = (N * sigma_squared)
-    ElogTheta = dirichlet_expectation(gamma)
+    ElogTheta = graphlib.dirichlet_expectation(gamma)
     assert len(ElogTheta) == K
 
     pC = (1.0 * y_d / Ns * eta)  
@@ -567,9 +510,31 @@ def doc_to_array(doc):
     """
     return np.array([w for word,count in doc for w in repeat(word, count)])
 
-def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
+def lda_update_phi(text, phi, gamma, beta):
     """
         Update phi in LDA. 
+        phi is N x K matrix.
+        gamma is a K-size vector
+
+     update phid:
+     φd,n ∝ exp{ E[log θ|γ] + 
+                 E[log p(wn|β1:K)] }
+     
+     Note that E[log p(wn|β1:K)] = log βTwn
+    """
+    (N, K) = phi.shape
+
+    ElogTheta = graphlib.dirichlet_expectation(gamma)
+
+    assert isinstance(text, np.ndarray)
+    phi[:,:] = ElogTheta + np.log(beta[:,text].T)
+    phi[:,:] = np.exp(phi[:,:])
+    row_normalize(phi)
+    return phi
+
+def slda_update_phi(text, phi, gamma, beta, y_d, eta, sigma_squared):
+    """
+        Update phi in (supervised!) sLDA. 
         phi is N x K matrix.
         gamma is a K-size vector
 
@@ -586,7 +551,7 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
 
     phi_sum = np.sum(phi, axis=0)
     Ns = (N * sigma_squared)
-    ElogTheta = dirichlet_expectation(gamma)
+    ElogTheta = graphlib.dirichlet_expectation(gamma)
 
     front = (-1.0 / (2 * N * Ns))
     pC = (1.0 * y_d / Ns * eta)  
@@ -622,15 +587,15 @@ def update_phi_lda_E_step(text, phi, gamma, beta, y_d, eta, sigma_squared):
             phi_sum += phi[n]
     return phi
 
-def update_log_phi_lda_E_step(text, log_phi, log_gamma, log_beta, y_d, eta, sigma_squared):
+def slda_update_log_phi(text, log_phi, log_gamma, log_beta, y_d, eta, sigma_squared):
     """
         Same as update_phi_lda_E_step but in log probability space.
     """
     (N, K) = log_phi.shape
 
-    log_phi_sum = logsum(log_phi, axis=0)
+    log_phi_sum = logsumexp(log_phi, axis=0)
     Ns = (N * sigma_squared)
-    ElogTheta = dirichlet_expectation(np.exp(log_gamma))
+    ElogTheta = graphlib.dirichlet_expectation(np.exp(log_gamma))
 
     front = (-1.0 / (2 * N * Ns))
     pC = (1.0 * y_d / Ns * eta)  
@@ -639,7 +604,7 @@ def update_log_phi_lda_E_step(text, log_phi, log_gamma, log_beta, y_d, eta, sigm
 
     log_right_eta_times_const = np.log(front * 2 * eta)
 
-    assert isinstance(text, np.ndarray):
+    assert isinstance(text, np.ndarray)
 
     # if text is in array form, do an approximate fast matrix update
     log_phi_minus_n = -1 + (logsumexp([log_phi, (-1 + log_phi_sum)]))
@@ -651,41 +616,142 @@ def update_log_phi_lda_E_step(text, log_phi, log_gamma, log_beta, y_d, eta, sigm
 
     log_row_normalize(log_phi)
 
-    return phi
+    return log_phi
 
-def do_E_step(global_iteration,
-                d, document, comment, 
-                alphaD, alphaC, 
-                betaD, betaC, 
-                gammaD, gammaC, 
-                phiD, phiC, 
-                y, eta, sigma_squared):
+def slda_global_elbo(v):
+    return np.sum(slda_local_elbo(v.documents[d], v.y[d], v.alpha, v.beta, v.gamma[d], v.phi[d], v.eta, v.sigma_squared) for d in xrange(len(v.documents)))
+
+def slda_local_elbo(document, y, alpha, beta, gamma, phi, eta, sigma_squared):
+    """Given all of the parametes for one document.
+        Calculate the evidence lower bound.
+        Helps you know when convergence happens in E step.
+
+   ELBO = ℒ = 
+    E[log p(θ|α)] + ΣNE[log p(Zn|θ)] + ΣNE[log p(wn|Zn,β1:K)]
+    E[log p(y|Z1:N,η,σ2)] + H(q)
+
+    The first 3 terms are LDA terms 
+        for document:
+
+    The last terms are for the y, and for the entropy of q.
+    """
+    elbo = 0.0
+    #print 'elbo lda terms...'
+    elbo += lda_elbo_terms(document, alpha, beta, gamma, phi)
+
+    #print 'elbo slda y...'
+    elbo += slda_elbo_y(y, eta, phi, sigma_squared)
+
+    #print 'elbo entropy...'
+      # todo: is it just the same as lda??
+    elbo += lda_elbo_entropy(gamma, phi)
+    return elbo
+
+
+def lda_global_elbo(v):
+    return np.sum(lda_local_elbo(v.documents[d], v.alpha, v.beta, v.gamma[d], v.phi[d],) for d in xrange(len(v.documents)))
+
+def lda_local_elbo(document, alpha, beta, gamma, phi):
+    return lda_elbo_terms(document, alpha, beta, gamma, phi) + lda_elbo_entropy(gamma, phi)
+
+def lda_E_step_for_doc(global_iteration, 
+                        d, document,
+                        alpha, beta,
+                        gamma, phi):
     """Given phi and gamma matrices and document of the document.
         Recalculate phi and gamma repeatedly iteratively.
         Uses local elbo calculation to check for convergence.
     """
-    (Nd,Kd) = phiD.shape
-    (Nc,Kc) = phiC.shape
-
-    initialize_random(phiD)
-    initialize_random(phiC)
-
-    local_elbo, local_last_elbo = 0, 0
     print "starting E step on doc {0}".format(d)
-    i = 0
+    graphlib.initialize_random(phi)
 
-    local_elbo = INITIAL_ELBO
-    last_local_elbo = INITIAL_ELBO - 100
-    while elbo_did_not_converge(local_elbo, last_local_elbo, i, criterion=0.1, max_iter=20):
+    i = 0
+    last_local_elbo, local_elbo = graphlib.INITIAL_ELBO - 100, graphlib.INITIAL_ELBO
+    while graphlib.elbo_did_not_converge(local_elbo, last_local_elbo, i, 
+                                            criterion=0.1, max_iter=20):
+        print 'will update gamma...'
+        lda_update_gamma(alpha, phi, gamma)
+
+        print 'will update phis...'
+        lda_update_phi(document, phi, gamma, beta)
+
+        if i % 2 == 0:
+            print 'will calculate elbo...'
+            last_local_elbo = local_elbo
+            local_elbo = lda_local_elbo(document, alpha, beta, gamma, phi)
+        i += 1
+
+        #print {'beta': beta, 'gamma': gamma, 'phi': phi}
+        print "{2}: e-step iteration {0} ELBO: {1}".format(i, local_elbo, global_iteration)
+    print "{2}: done e-step on doc {3}: {0} iterations ELBO: {1}".format(i, local_elbo, global_iteration, d)
+    return i
+
+def slda_E_step_for_doc(global_iteration, 
+                        d, document, y,
+                        alpha, beta, gamma, phi,
+                        eta, sigma_squared):
+    """Given phi and gamma matrices and document of the document.
+        Recalculate phi and gamma repeatedly iteratively.
+        Also recalculate y.
+        Uses local elbo calculation to check for convergence.
+    """
+    print "starting E step on doc {0}".format(d)
+    graphlib.initialize_random(phi)
+    i = 0
+    last_local_elbo, local_elbo = graphlib.INITIAL_ELBO - 100, graphlib.INITIAL_ELBO
+    while graphlib.elbo_did_not_converge(local_elbo, last_local_elbo, i, 
+                                            criterion=0.1, max_iter=20):
         print 'will update gamma...'
         # update gammas
-        update_gamma_lda_E_step(alphaD, phiD, gammaD)
-        update_gamma_lda_E_step(alphaC, phiC, gammaC)
+        lda_update_gamma(alpha, phi, gamma)
 
         print 'will update phis...'
         # update phis (note we have to pass the right part of eta!)
-        update_phi_lda_E_step(document, phiD, gammaD, betaD, y[d], eta[:Kd], sigma_squared)
-        update_phi_lda_E_step(comment, phiC, gammaC, betaC, y[d], eta[Kd:], sigma_squared)
+        slda_update_phi(document, phi, gamma, beta, y, eta, sigma_squared)
+
+        if i % 2 == 0:
+            print 'will calculate elbo...'
+            # calculate new ELBO
+            last_local_elbo = local_elbo
+            local_elbo = slda_local_elbo(document, y, alpha, beta, gamma, phi, eta, sigma_squared)
+        i += 1
+
+        #print {'beta': beta, 'gamma': gamma, 'phi': phi, 'y': y, 'eta': eta}
+        print "{2}: e-step iteration {0} ELBO: {1}".format(i, local_elbo, global_iteration)
+    print "{2}: done e-step on doc {3}: {0} iterations ELBO: {1}".format(i, local_elbo, global_iteration, d)
+    return i
+
+
+def lm_E_step_for_doc(global_iteration,
+                        d, document, comment, 
+                        alphaD, alphaC, 
+                        betaD, betaC, 
+                        gammaD, gammaC, 
+                        phiD, phiC, 
+                        y, eta, sigma_squared):
+    """Given phi and gamma matrices and document of the document.
+        Recalculate phi and gamma repeatedly iteratively.
+        Uses local elbo calculation to check for convergence.
+    """
+    print "starting E step on doc {0}".format(d)
+    graphlib.initialize_random(phiD)
+    graphlib.initialize_random(phiC)
+
+    i = 0
+    last_local_elbo, local_elbo = graphlib.INITIAL_ELBO - 100, graphlib.INITIAL_ELBO
+    while graphlib.elbo_did_not_converge(local_elbo, last_local_elbo, i, 
+                                            criterion=0.1, max_iter=20):
+        print 'will update gamma...'
+        # update gammas
+        lda_update_gamma(alphaD, phiD, gammaD)
+        lda_update_gamma(alphaC, phiC, gammaC)
+
+        Nd,Kd = phiD.shape
+
+        print 'will update phis...'
+        # update phis (note we have to pass the right part of eta!)
+        slda_update_phi(document, phiD, gammaD, betaD, y[d], eta[:Kd], sigma_squared)
+        slda_update_phi(comment, phiC, gammaC, betaC, y[d], eta[Kd:], sigma_squared)
 
         print 'will calculate y...'
         # update the response variable
@@ -696,8 +762,7 @@ def do_E_step(global_iteration,
             print 'will calculate elbo...'
             # calculate new ELBO
             last_local_elbo = local_elbo
-            local_elbo = calculate_local_elbo(document, comment, alphaD, alphaC, betaD, betaC, gammaD, gammaC, phiD, phiC, y[d], eta, sigma_squared)
-
+            local_elbo = lm_local_elbo(document, comment, alphaD, alphaC, betaD, betaC, gammaD, gammaC, phiD, phiC, y[d], eta, sigma_squared)
         i += 1
 
         #print {'beta': (betaD, betaC), 'gamma': (gammaD, gammaC), 'phi': (phiD, phiC), 'y': y, 'eta': eta}
@@ -716,7 +781,7 @@ def iterwords(text):
             yield n,word,count
             n += 1
 
-def calculate_local_elbo(document, comment,
+def lm_local_elbo(document, comment,
                          alphaD, alphaC, 
                          betaD, betaC, 
                          gammaD, gammaC, 
@@ -739,17 +804,17 @@ def calculate_local_elbo(document, comment,
     """
     elbo = 0.0
     #print 'elbo lda terms...'
-    elbo += lda_elbo_terms(alphaD, gammaD, phiD, betaD, document)
-    elbo += lda_elbo_terms(alphaC, gammaC, phiC, betaC, comment)
+    elbo += lda_elbo_terms(document, alphaD, betaD, gammaD, phiD)
+    elbo += lda_elbo_terms(comment, alphaC, betaC, gammaC, phiC)
 
     #print 'elbo slda y...'
-    elbo += elbo_slda_y(y, eta, phiD, phiC, sigma_squared)
+    elbo += lm_elbo_y_from_small_phis(y, eta, phiD, phiC, sigma_squared)
 
     #print 'elbo entropy...'
-    elbo += elbo_entropy(gammaD, gammaC, phiD, phiC)
+    elbo += lm_elbo_entropy(gammaD, gammaC, phiD, phiC)
     return elbo
 
-def elbo_entropy(gammaD, gammaC, phiD, phiC):
+def lm_elbo_entropy(gammaD, gammaC, phiD, phiC):
     """Calculates entropy of the variational distribution q.
 
     H(q) = 
@@ -757,11 +822,12 @@ def elbo_entropy(gammaD, gammaC, phiD, phiC):
     – ΣNΣK φCn,klog φCn,k – log Γ(ΣKγkC) + ΣKlog Γ(γkC)  – ΣK(γkC – 1)E[log θkC]
     """
     elbo = 0.0
-    elbo += elbo_entropy_lda(phiD, gammaD)
-    elbo += elbo_entropy_lda(phiC, gammaC)
+    elbo += lda_elbo_entropy(gammaD, phiD)
+    elbo += lda_elbo_entropy(gammaC, phiC)
     return elbo
 
-def elbo_entropy_lda(phi, gamma):
+
+def lda_elbo_entropy(gamma, phi):
     """Entropy of variational distribution q in LDA.
 
     Accepts phi (N x K) matrix.
@@ -781,19 +847,22 @@ def elbo_entropy_lda(phi, gamma):
     elbo += -1 * gammaln(np.sum(gamma))
     elbo += np.sum(gammaln(gamma))
 
-    ElogTheta = dirichlet_expectation(gamma)
+    ElogTheta = graphlib.dirichlet_expectation(gamma)
     assert ElogTheta.shape == gamma.shape
     elbo += -1 * sum((gamma - 1) * ElogTheta)
 
     return elbo
 
 
-def elbo_slda_y(y, eta, phiD, phiC, sigma_squared):
+def lm_elbo_y_from_small_phis(y, eta, phiD, phiC, sigma_squared):
     """
     Calculates some terms in the elbo for a document.
     Same as in sLDA.
 
     E[log p(y|Z1:N,η,σ2)] = (–1/2)log 2πσ2 – (1/2σ2)[y2– 2yηTE[Z] + ηTE[ZZT]η]
+
+    Test:
+    Should be the same as slda_elbo_y when phiD and phiC are catercorner concatenated.
     """
     elbo = 0.0
     ss = sigma_squared
@@ -804,9 +873,26 @@ def elbo_slda_y(y, eta, phiD, phiC, sigma_squared):
     nEZZTn = np.dot(np.dot(eta, ezzt), eta)
     elbo += (-0.5 / ss) * (y*y - (2 * y * np.dot(eta, ez)) + nEZZTn)
     return elbo
+
+def slda_elbo_y(y, eta, phi, sigma_squared):
+    """
+    Calculates some terms in the elbo for a document.
+    Same as in sLDA.
+
+    E[log p(y|Z1:N,η,σ2)] = (–1/2)log 2πσ2 – (1/2σ2)[y2– 2yηTE[Z] + ηTE[ZZT]η]
+    """
+    elbo = 0.0
+    ss = sigma_squared
+    elbo += (-0.5) * np_log(2 * np.pi * ss)
+    
+    ez = calculate_EZ(phi)
+    ezzt = calculate_EZZT(phi)
+    nEZZTn = np.dot(np.dot(eta, ezzt), eta)
+    elbo += (-0.5 / ss) * (y*y - (2 * y * np.dot(eta, ez)) + nEZZTn)
+    return elbo
     
 
-def lda_elbo_terms(alpha, gamma, phi, beta, document):
+def lda_elbo_terms(document, alpha, beta, gamma, phi):
     """
     Calculates some terms in the elbo for a document.
     Same as in LDA.
@@ -825,14 +911,14 @@ def lda_elbo_terms(alpha, gamma, phi, beta, document):
     # E[log p(θ|a)] = log Γ(Σkai) – Σklog Γ(ai) + ΣK(ak-1)E[log θk] 
     elbo += gammaln(np.sum(alpha)) - np.sum(gammaln(alpha))
 
-    ElogTheta = dirichlet_expectation(gamma)
+    ElogTheta = graphlib.dirichlet_expectation(gamma)
     #assert len(ElogTheta) == len(alpha)
     #assert ElogTheta.shape == alpha.shape
     elbo += np.sum((alpha - 1) * ElogTheta)
 
     if isinstance(document, np.ndarray):
         # even faster optimization
-        elbo += np.sum(phi * (ElogTheta + (np_log(np_second_arg_array_index(beta,document).T))))
+        elbo += np.sum(phi * (ElogTheta + (np.log(beta[:,document]).T)))
     else:
         for n,word,count in iterwords(document):
             # E[log p(Zn|θ)] = ΣKφn,kE[log θk]
@@ -845,228 +931,9 @@ def lda_elbo_terms(alpha, gamma, phi, beta, document):
     return elbo
 
 
-def calculate_global_elbo(documents, comments, alphaD, alphaC, betaD, betaC, gammaD, gammaC, phiD, phiC, y, eta, sigma_squared):
+def lm_global_elbo(documents, comments, alphaD, alphaC, betaD, betaC, gammaD, gammaC, phiD, phiC, y, eta, sigma_squared):
     """Given all of the parametes.
         Calculate the evidence lower bound.
         Helps you know when convergence happens.
     """
-    return np.sum(calculate_local_elbo(documents[d], comments[d], alphaD, alphaC, betaD, betaC, gammaD[d], gammaC[d], phiD[d], phiC[d], y[d], eta, sigma_squared) for d in xrange(len(documents)))
-
-            
-
-'''
-
-
-
-class GraphVars(object):
-    """Abstract class useful for holding 
-        graphical model hidden and observed variables.
-    """
-    def __init__(self):
-        pass
-
-    # calculate number of words per document/comment
-    if isinstance(self.documents[0], np.ndarray):
-        document_Nds = [len(d) for d in self.documents]
-    else:
-        document_Nds = [sum(w[1] for w in d) for d in self.documents]
-
-
-def run_variational_em(var, e_step_func, m_step_func, global_elbo_func, print_func=None):
-    """
-    General Variational Expectation Maximization algorithm.
-
-    var: the GraphVars variables state class. This keeps track of the state of optimization.
-
-    e_step_func: performs the expectation step. 
-                 Accepts total number of iterations, and GraphVars variables state class.
-                 Returns some information about how long the E-step took.
-                 In LDA for example, 
-                    it will return the number of local iterations 
-                    it took to converge at the document level
-
-    m_step_func: performs the maximization step. 
-                 Accepts the GraphVars variables state class.
-                 Returns nothing.
-
-    global_elbo_func: returns the Evidence Lower Bound for variational EM
-                 Accepts the GraphVars variables state class.
-                 Returns a double.
-                    
-    print_func: useful for debugging. optional. Accepts local state. May print things.
-                 Accepts the GraphVars variables state class.
-                 Returns nothing.
-
-    Algorithm:
-    Initialize all the variables (assumed to be already done in var)
-    Repeat until the ELBO converges (global_elbo_func):
-        Do the E-step:
-            For each document d:
-                (e_step_func)
-                Initialize local variables randomly.
-                Repeat until the local ELBO converges:
-                    Update all of the local variables
-        Do the M-step (m_step_func):
-            Update the global parameters.
-        Print any variables for debugging (print_func)
-    """
-    assert var.is_initialized
-
-    global final_output
-    final_output = {}
-
-    iterations = 0
-    elbo = INITIAL_ELBO
-    last_elbo = INITIAL_ELBO - 100
-    local_i = 0
-
-    #for globaliternum in xrange(100):
-    while elbo_did_not_converge(elbo, last_elbo, 
-                                         iterations, criterion=0.1, max_iter=20):
-        
-        ### E-step ###
-        local_i = e_step_func(iterations, var)
-
-        m_step_func(var)
-
-        print 'will calculate elbo...'
-        last_elbo = elbo
-        elbo = global_elbo_func(var)
-
-        # todo: maybe write all these vars every iteration (or every 10) ?
-        iterations += 1
-
-        final_output.update(var.to_dict())
-        final_output.update({'iterations': iterations, 'elbo': elbo,})
-
-        #print final_output
-        if print_func is not None:
-            print print_func(var)
-
-        print '{1} ({2} per doc) GLOBAL ELBO: {0}'.format(elbo, iterations, local_i)
-
-    return final_output
-
-
-########### PYPY-only functions! ###########
-this_is_pypy = ('matrix' in dir(np))
-
-def ispypy():
-    """Returns a boolean True if pypy is running the program.
-        Does this by checking the matrix module, which is not currently implemented.
-    """
-    return this_is_pypy
-
-def random_normal(mu, sigma, shape):
-    """Define my own random normal, since numpypy does not have np.random.normal ."""
-    size = shape[0]
-    n = np.array([random.gauss(mu, sigma) for i in xrange(size)])
-    return n
-
-def axis_sum(matrix, axis):
-    """Accepts a 2-d array and axis integer (0 or 1).
-    """
-    assert axis in [0, 1]
-    if ispypy():
-        nrows,ncols = matrix.shape
-        if axis == 1:
-            return np.array([np.sum(matrix[i]) for i in xrange(nrows)])
-        else:
-            return np.array([np.sum(matrix[:,i]) for i in xrange(ncols)])
-    else:
-        rowsums = np.sum(matrix, axis=1)
-        return rowsums
-
-def np_concatenate((a, b), axis=1):
-    """Accepts a 1-d array and axis (only 1) and concatenates them.
-    """
-    assert axis in [1]
-    if ispypy():
-        n = np.zeros((len(a) + len(b),))
-        n[:len(a)] = a
-        n[len(a):] = b
-        return n
-    else:
-        return np.concatenate(a, b, axis=1)
-
-
-def matrix_multiply(a, b):
-    """Takes two matrices and does a complicated matrix multiply.  Yes that one.
-    """
-    if len(a.shape) == 1:
-        nrows, = a.shape
-        a = np.zeros((nrows, 1))
-
-    if len(b.shape) == 1:
-        bc, = b.shape
-        if bc == a.shape[1]:
-            b = np.zeros((bc, 1))
-        else:
-            b = np.zeros((1, bc))
-       
-    nrows,ac = a.shape
-    bc,ncols = b.shape
-
-    assert ac == bc
-    if ispypy():
-        n = np.zeros((nrows, ncols))
-        for i in xrange(nrows):
-            for j in xrange(ncols):
-                n[i,j] = np.sum(a[i] * b[:,j])
-        return n
-    else:
-        np.dot(a, b)
-
-
-def np_diag(a):
-    """Takes a 1-d vector and makes it the diagonal of a 2-d vector
-    """
-    if ispypy():
-        nrows, = a.shape
-        n = np.zeros((nrows, nrows))
-        for i in xrange(nrows):
-            n[i,i] = a[i]
-        return n
-    else:
-        return np.diag(a)
-
-def np_second_arg_array_index(matrix, array):
-    """look at second part."""
-    if ispypy():
-        nrows,ncols = matrix.shape
-        if len(array.shape) == 1:
-            n = np.zeros((1, array.shape[0]))
-            for i in xrange(array.shape[0]):
-                n[0,i] = np.sum(matrix[:,int(array[i])])
-            return n
-        else:
-            assert len(array.shape) == 2
-            n = np.zeros(array.shape)
-            for i in xrange(array.shape[0]):
-                n[i] = np_second_arg_array_index(matrix, array[i])
-            return n
-
-    else:
-        return matrix[:,array]
-
-def np_log(a):
-    """Takes a nd array or int, returns log
-    """
-    if ispypy():
-        if isinstance(a, np.ndarray):
-            n = np.zeros(a.shape)
-            if len(a.shape) == 1:
-                for i in xrange(len(a)):
-                    n[i] = math.log(a[i])
-            else:
-                assert len(a.shape) == 2
-                for i in xrange(a.shape[0]):
-                    for j in xrange(a.shape[1]):
-                        n[i,j] = math.log(a[i,j])
-            return n
-        else:
-            return math.log(a)
-    else:
-        return np.log(a)
-########### END END PYPY-only functions! ###########
-
+    return np.sum(lm_local_elbo(documents[d], comments[d], alphaD, alphaC, betaD, betaC, gammaD[d], gammaC[d], phiD[d], phiC[d], y[d], eta, sigma_squared) for d in xrange(len(documents)))
