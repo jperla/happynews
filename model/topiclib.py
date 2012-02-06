@@ -18,9 +18,7 @@ except ImportError:
 import graphlib
 from graphlib import logsumexp
 from graphlib import logdotexp
-from graphlib import row_normalize
-from graphlib import log_row_normalize
-from graphlib import np_log
+from graphlib import ensure
 
 def initialize_log_beta(num_topics, num_words):
     """Initializes beta randomly using a random dirichlet.
@@ -55,14 +53,16 @@ def lda_recalculate_beta(text, beta, phi):
 
     if isinstance(text[0], np.ndarray):
         for d in xrange(D):
+            ensure(phi[d].shape[1] == K)
             for n,word in enumerate(text[d]):
-                for k in xrange(K):
-                    beta[k,word] += phi[d][n][k]
+                beta[:,word] += phi[d][n,:]
+            #words, indexes = text[d], np.array(range(len(text[d])))
+            #beta[:,words] += phi[d][indexes,:].T
     else:
         for d in xrange(D):
+            ensure(phi[d].shape[1] == K)
             for n,word,count in iterwords(text[d]):
-                for k in xrange(K):
-                    beta[k,word] += phi[d][n][k]
+                beta[:,word] += phi[d][n,:]
     graphlib.row_normalize(beta)
     return beta
 
@@ -123,7 +123,6 @@ def calculate_big_log_phi(phi1, phi2):
     big_phi[n1:n1+n2,k1:k1+k2] = phi2
     return big_phi
 
-
 def slda_recalculate_eta_sigma(eta, y, phi):
     """
         Accepts eta (K)-size vector,
@@ -137,40 +136,36 @@ def slda_recalculate_eta_sigma(eta, y, phi):
         (Note that A is the D X (K + J) matrix whose rows are the vectors ZdT.)
         (Also note that the dth row of E[A] is φd, and E[ATA] = Σd E[ZdZdT] .)
         (Also, note that E[Z] = φ := (1/N)Σnφn, and E[ZdZdT] = (1/N2)(ΣnΣm!=nφd,nφd,mT  +  Σndiag{φd,n})
+
+    """
+    assert len(eta) == phi.shape[1]
+    partial_slda_recalculate_eta_sigma(eta, y, phi)
+
+def partial_slda_recalculate_eta_sigma(eta, y, phi):
+    """
+        Same as slda_recalculate_eta_sigma, but also
+          supports partial updates if len(eta) < phi.shape[1] .
+          Will only update based on first Ks topics of phi
     """
     D = len(phi)
     assert D >= 1
 
     N,K = phi[0].shape
+    Ks = len(eta)
 
-    #print 'e_a...'
-    E_A = np.empty((D, K))
+    print 'e_a...'
+    E_A = np.empty((D, Ks))
     for d in xrange(D):
-        E_A[d,:] = calculate_EZ(phi[d])
+        E_A[d,:] = calculate_EZ(phi[d][:,:Ks])
   
-    #print 'inverse...'
-    E_ATA_inverse = calculate_E_ATA_inverse(phi)
+    E_ATA_inverse = calculate_E_ATA_inverse([p[:,:Ks] for p in phi])
 
-    #print 'new eta...'
-    #new_eta = matrix_multiply(matrix_multiply(E_ATA_inverse, E_A.T), y)
+    print 'new eta...'
     new_eta = np.dot(np.dot(E_ATA_inverse, E_A.T), y)
-
-    '''
-     # not necessary anymore?
-    if np.sum(np.abs(new_eta)) > (KJ * KJ * 5):
-        print 'ETA is GOING CRAZY {0}'.format(eta)
-        print 'aborting the update!!!'
-    else:
-        eta[:] = new_eta
-    '''
     eta[:] = new_eta
     
-    # todo: don't do this later
-    # keep sigma squared fix
-    #import pdb; pdb.set_trace()
-    #new_sigma_squared = (1.0 / D) * (np.dot(y, y) - np.dot(np.dot(np.dot(np.dot(y, E_A), E_ATA_inverse), E_A.T), y))
+    print 'new sigma squared...'
     new_sigma_squared = (1.0 / D) * (np.dot(y, y) - np.dot(np.dot(y, E_A), eta))
-    #new_sigma_squared = 1.0
     return new_sigma_squared
 
 def lm_recalculate_eta_sigma(eta, y, phi1, phi2):
@@ -366,15 +361,12 @@ def calculate_EZZT(big_phi):
         (Also, E[ZdZdT] = (1/N2)(ΣNΣm!=nφd,nφd,mT  +  ΣNdiag{φd,n})
     """
     (N, K) = big_phi.shape
-    inner_sum = np.zeros((K, K))
-    for n in xrange(N):
-        for m in xrange(N):
-            if n != m:
-                new_matrix = np.dot(np.matrix(big_phi[n]).T, np.matrix(big_phi[m]))
-                assert new_matrix.shape == inner_sum.shape
-                inner_sum += new_matrix
-    inner_sum += np.diag(np.sum(big_phi, axis=0))
+    inner_sum = np.empty((K, K))
 
+    for i in xrange(K):
+        for j in xrange(K):
+            inner_sum[i,j] = np.sum(np.multiply.outer(big_phi[:,i], big_phi[:,j])) - np.sum(np.dot(big_phi[:,i], big_phi[:,j]))
+    inner_sum += np.diag(np.sum(big_phi, axis=0))
     inner_sum /= (N * N)
     return inner_sum
 
@@ -383,11 +375,13 @@ def calculate_E_ATA_inverse(phi):
         and a big_phi matrix of size (N, K).
         Returns a new matrix which is inverse of E([ATA]) of size (K,K).
     """
+    print 'E_ATA...'
     D = len(phi)
     N,K = phi[0].shape
     E_ATA = sum(calculate_EZZT(phi[d]) for d in xrange(D))
     assert E_ATA.shape == (K, K)
 
+    print 'inverse...'
     # todo: does not work in pypy
     return np.linalg.inv(E_ATA)
 
@@ -464,7 +458,7 @@ def _unoptimized_slda_update_phi(text, phi, gamma, beta, y_d, eta, sigma_squared
         phi_sum -= phi[n]
         assert len(phi_sum) == K
 
-        pB = np_log(beta[:,word])
+        pB = np.log(beta[:,word])
         pD = (front * (((2 * np.dot(eta, phi_sum) * eta) + eta_dot_eta))
                             )
         assert len(pB) == K
@@ -472,8 +466,12 @@ def _unoptimized_slda_update_phi(text, phi, gamma, beta, y_d, eta, sigma_squared
         assert len(pD) == K
 
         # must exponentiate and sum immediately!
-        phi[n,:] = np.exp(ElogTheta + pB + pC + pD)
-        phi[n,:] /= np.sum(phi[n,:])
+        #phi[n,:] = np.exp(ElogTheta + pB + pC + pD)
+        #phi[n,:] /= np.sum(phi[n,:])
+        # log normalize before exp for numerical stability
+        phi[n,:] = ElogTheta + pB + pC + pD
+        phi[n,:] -= graphlib.logsumexp(phi[n,:])
+        phi[n,:] = np.exp(phi[n,:])
 
         # add this back into the sum
         # unlike in LDA, this cannot be computed in parallel
@@ -488,7 +486,7 @@ def doc_to_array(doc):
     """
     return np.array([w for word,count in doc for w in repeat(word, count)])
 
-def lda_update_phi(text, phi, gamma, beta):
+def lda_update_phi(text, phi, gamma, beta, normalize=True, logspace=False):
     """
         Update phi in LDA. 
         phi is N x K matrix.
@@ -504,66 +502,80 @@ def lda_update_phi(text, phi, gamma, beta):
 
     ElogTheta = graphlib.dirichlet_expectation(gamma)
 
+    # todo: call a log version of this in slda and others!
     assert isinstance(text, np.ndarray)
     phi[:,:] = ElogTheta + np.log(beta[:,text].T)
-    phi[:,:] = np.exp(phi[:,:])
-    row_normalize(phi)
+    if normalize:
+        graphlib.log_row_normalize(phi)
+    if not logspace:
+        phi[:,:] = np.exp(phi[:,:])
     return phi
 
 def slda_update_phi(text, phi, gamma, beta, y_d, eta, sigma_squared):
-    """
-        Update phi in (supervised!) sLDA. 
-        phi is N x K matrix.
-        gamma is a K-size vector
+    """Update phi in (supervised!) sLDA. 
+       phi is N x K matrix.
+       gamma is a K-size vector
 
-     update phid:
-     φd,n ∝ exp{ E[log θ|γ] + 
-                 E[log p(wn|β1:K)] + 
-                 (y / Nσ2) η  — 
-                 [2(ηTφd,-n)η + (η∘η)] / (2N2σ2) }
-            exp{ A + B + C - D}
-     
-     Note that E[log p(wn|β1:K)] = log βTwn
+    update phid:
+    φd,n ∝ exp{ E[log θ|γ] + 
+                E[log p(wn|β1:K)] + 
+                (y / Nσ2) η  — 
+                [2(ηTφd,-n)η + (η∘η)] / (2N2σ2) }
+           exp{ A + B + C - D}
+    
+    Note that E[log p(wn|β1:K)] = log βTwn
+
+    If len(eta) < phi.shape[1], then it is a Partial update.
+        Same as slda update phi, but eta only acts on first few topics in phi.
+    """
+    assert len(eta) == phi.shape[1]
+    partial_slda_update_phi(text, phi, gamma, beta, y_d, eta, sigma_squared)
+
+def partial_slda_update_phi(text, phi, gamma, beta, y_d, eta, sigma_squared):
+    """Same as slda update phi, but eta may be smaller than total number of topics.
+        So only some of the topics contribute to y.
     """
     (N, K) = phi.shape
+    Ks = len(eta)
 
-    phi_sum = np.sum(phi, axis=0)
+    phi_sum = np.sum(phi[:,:Ks], axis=0)
     Ns = (N * sigma_squared)
     ElogTheta = graphlib.dirichlet_expectation(gamma)
 
     front = (-1.0 / (2 * N * Ns))
-    pC = (1.0 * y_d / Ns * eta)  
     eta_dot_eta = front * (eta * eta)
-    const = ElogTheta + pC + eta_dot_eta
+    pC = ((1.0 * y_d / Ns) * eta) + eta_dot_eta
 
     right_eta_times_const = (front * 2 * eta)
 
     if isinstance(text, np.ndarray):
         # if text is in array form, do an approximate fast matrix update
-        phi_minus_n = -(phi - phi_sum)
-        #phi[:,:] = np_log(np_second_arg_array_index(beta,text).T)
-        phi[:,:] = np.log(beta[:,text].T)
-        #phi[:,:] += matrix_multiply(axis_sum(eta * phi_minus_n, axis=1).T, right_eta_times_const)
-        phi[:,:] += np.dot(np.matrix(np.dot(phi_minus_n, eta)).T, np.matrix(right_eta_times_const))
-        phi[:,:] += const
+        phi_minus_n = -(phi[:,:Ks] - phi_sum)
+        phi[:,:] = ElogTheta + np.log(beta[:,text].T)
+        phi[:,:Ks] += pC
+        phi[:,:Ks] += np.dot(np.matrix(np.dot(phi_minus_n, eta)).T, np.matrix(right_eta_times_const))
+        graphlib.log_row_normalize(phi)
         phi[:,:] = np.exp(phi[:,:])
-        row_normalize(phi)
     else:
         # otherwise, iterate through each word
         for n,word,count in iterwords(text):
-            phi_sum -= phi[n]
+            phi_sum -= phi[n,:Ks]
 
-            pB = np_log(beta[:,word])
+            pB = np.log(beta[:,word])
             pD = (np.dot(eta, phi_sum) * right_eta_times_const) 
 
             # must exponentiate and normalize immediately!
-            phi[n,:] = np.exp(pB + pD + const)
-            phi[n,:] /= np.sum(phi[n,:])
+            phi[n,:] = ElogTheta + pB
+            phi[n,:] += pC + pD
+            phi[n,:] -= graphlib.logsumexp(phi[n,:]) # normalize in logspace
+            phi[n,:] = np.exp(phi[n,:])
+
 
             # add this back into the sum
             # unlike in LDA, this cannot be computed in parallel
-            phi_sum += phi[n]
+            phi_sum += phi[n,:Ks]
     return phi
+
 
 def slda_update_log_phi(text, log_phi, log_gamma, log_beta, y_d, eta, sigma_squared):
     """
@@ -592,9 +604,29 @@ def slda_update_log_phi(text, log_phi, log_gamma, log_beta, y_d, eta, sigma_squa
                                         np.matrix(log_right_eta_times_const)), 
                               log_const,], axis=0)
 
-    log_row_normalize(log_phi)
+    graphlib.log_row_normalize(log_phi)
 
     return log_phi
+
+def partial_slda_global_elbo(v):
+    return np.sum(partial_slda_local_elbo(v.documents[d], v.y[d], v.alpha, v.beta, v.gamma[d], v.phi[d], v.eta, v.sigma_squared) for d in xrange(len(v.documents)))
+
+def partial_slda_local_elbo(document, y, alpha, beta, gamma, phi, eta, sigma_squared):
+    """Same as slda local elbo, but different elbo y update.
+        Only send part of phi!
+    """
+    elbo = 0.0
+    #print 'elbo lda terms...'
+    elbo += lda_elbo_terms(document, alpha, beta, gamma, phi)
+
+    #print 'elbo slda y...'
+    Ks = len(eta)
+    elbo += slda_elbo_y(y, eta, phi[:,:Ks], sigma_squared)
+
+    #print 'elbo entropy...'
+      # todo: is it just the same as lda??
+    elbo += lda_elbo_entropy(gamma, phi)
+    return elbo
 
 def slda_global_elbo(v):
     return np.sum(slda_local_elbo(v.documents[d], v.y[d], v.alpha, v.beta, v.gamma[d], v.phi[d], v.eta, v.sigma_squared) for d in xrange(len(v.documents)))
@@ -614,13 +646,13 @@ def slda_local_elbo(document, y, alpha, beta, gamma, phi, eta, sigma_squared):
     The last terms are for the y, and for the entropy of q.
     """
     elbo = 0.0
-    print 'elbo lda terms...'
+    #print 'elbo lda terms...'
     elbo += lda_elbo_terms(document, alpha, beta, gamma, phi)
 
-    print 'elbo slda y...'
+    #print 'elbo slda y...'
     elbo += slda_elbo_y(y, eta, phi, sigma_squared)
 
-    print 'elbo entropy...'
+    #print 'elbo entropy...'
       # todo: is it just the same as lda??
     elbo += lda_elbo_entropy(gamma, phi)
     return elbo
@@ -633,6 +665,7 @@ def lda_local_elbo(document, alpha, beta, gamma, phi):
     return lda_elbo_terms(document, alpha, beta, gamma, phi) + lda_elbo_entropy(gamma, phi)
 
 def lda_E_step_for_doc(global_iteration, 
+                        last_local_iterations,
                         d, document,
                         alpha, beta,
                         gamma, phi):
@@ -640,31 +673,86 @@ def lda_E_step_for_doc(global_iteration,
         Recalculate phi and gamma repeatedly iteratively.
         Uses local elbo calculation to check for convergence.
     """
-    print "starting E step on doc {0}".format(d)
+    #print "starting E step on doc {0}".format(d)
     graphlib.initialize_random(phi)
 
+    ensure(phi.shape[1] == beta.shape[0] == len(gamma) == len(alpha))
+    ensure(phi.shape[0] == len(document))
+
     i = 0
+    min_iter = 20 - global_iteration
+    max_iter = last_local_iterations if last_local_iterations > 0 else 20
     last_local_elbo, local_elbo = graphlib.INITIAL_ELBO - 100, graphlib.INITIAL_ELBO
     while graphlib.elbo_did_not_converge(local_elbo, last_local_elbo, i, 
-                                            criterion=0.1, max_iter=20):
-        print 'will update gamma...'
+                                        criterion=0.1, 
+                                        min_iter=min_iter, max_iter=max_iter):
+        #print 'will update gamma...'
         lda_update_gamma(alpha, phi, gamma)
 
-        print 'will update phis...'
+        #print 'will update phis...'
         lda_update_phi(document, phi, gamma, beta)
 
-        if i % 2 == 0:
-            print 'will calculate elbo...'
+        if last_local_iterations == 0:
+            #print 'will calculate elbo...'
             last_local_elbo = local_elbo
             local_elbo = lda_local_elbo(document, alpha, beta, gamma, phi)
         i += 1
 
         #print {'beta': beta, 'gamma': gamma, 'phi': phi}
-        print "{2}: e-step iteration {0} ELBO: {1}".format(i, local_elbo, global_iteration)
-    print "{2}: done e-step on doc {3}: {0} iterations ELBO: {1}".format(i, local_elbo, global_iteration, d)
+        #print "{2}: e-step iteration {0} ELBO: {1}".format(i, local_elbo, global_iteration)
+    if d % 100 == 0:
+        print "{2}: done LDA e-step on doc {3}: {0} iterations ELBO: {1}".format(i, local_elbo, global_iteration, d)
+    return i
+
+def partial_slda_E_step_for_doc(global_iteration, 
+                                last_local_iterations,
+                                d, document, y,
+                                alpha, beta, gamma, phi,
+                                eta, sigma_squared):
+    """Same as sLDA e-step, but slightly different phi update,
+        and slightly different elbo calculation.
+    """
+    #print "starting E step on doc {0}".format(d)
+    graphlib.initialize_random(phi)
+
+    ensure(phi.shape[1] == beta.shape[0] == len(gamma) == len(alpha))
+    ensure(phi.shape[0] == len(document))
+    ensure(len(eta) < phi.shape[1]) # is partial
+
+    i = 0
+    min_iter = 20 - global_iteration
+    max_iter = last_local_iterations if last_local_iterations > 0 else 20
+    last_local_elbo, local_elbo = graphlib.INITIAL_ELBO - 100, graphlib.INITIAL_ELBO
+    while graphlib.elbo_did_not_converge(local_elbo, last_local_elbo, i, 
+                                        criterion=0.01,
+                                        min_iter=min_iter, max_iter=max_iter):
+        #print 'will update gamma...'
+        # update gammas
+        lda_update_gamma(alpha, phi, gamma)
+
+        #print 'will update phis...'
+        assert len(eta) < phi.shape[1] #otherwise it's a full update
+        partial_slda_update_phi(document, phi, gamma, beta, y, eta, sigma_squared)
+
+        # speed things up by maxing out in first five E runs
+        # also use same as last local iterations
+        if last_local_iterations == 0:
+            #print 'will calculate elbo...'
+            # calculate new ELBO
+            last_local_elbo = local_elbo
+            local_elbo = partial_slda_local_elbo(document, y, 
+                                                    alpha, beta, gamma, phi, 
+                                                    eta, sigma_squared)
+        i += 1
+
+        #print {'beta': beta, 'gamma': gamma, 'phi': phi, 'y': y, 'eta': eta}
+        #print "{2}: e-step iteration {0} ELBO: {1}".format(i, local_elbo, global_iteration)
+    if d % 100 == 0:
+        print "{2}: done pSLDA e-step on doc {3}: {0} iterations ELBO: {1}".format(i, local_elbo, global_iteration, d)
     return i
 
 def slda_E_step_for_doc(global_iteration, 
+                        last_local_iterations,
                         d, document, y,
                         alpha, beta, gamma, phi,
                         eta, sigma_squared):
@@ -675,20 +763,23 @@ def slda_E_step_for_doc(global_iteration,
     """
     print "starting E step on doc {0}".format(d)
     graphlib.initialize_random(phi)
+
     i = 0
+    max_iter = last_local_iterations if last_local_iterations > 0 else 20
     last_local_elbo, local_elbo = graphlib.INITIAL_ELBO - 100, graphlib.INITIAL_ELBO
     while graphlib.elbo_did_not_converge(local_elbo, last_local_elbo, i, 
-                                            criterion=0.1, max_iter=20):
-        print 'will update gamma...'
+                                            criterion=0.01, max_iter=max_iter):
+        #print 'will update gamma...'
         # update gammas
         lda_update_gamma(alpha, phi, gamma)
 
-        print 'will update phis...'
-        # update phis (note we have to pass the right part of eta!)
+        #print 'will update phis...'
         slda_update_phi(document, phi, gamma, beta, y, eta, sigma_squared)
 
-        if i % 2 == 0:
-            print 'will calculate elbo...'
+        # speed things up by maxing out in first five E runs
+        # also use same as last local iterations
+        if last_local_iterations == 0:
+            #print 'will calculate elbo...'
             # calculate new ELBO
             last_local_elbo = local_elbo
             local_elbo = slda_local_elbo(document, y, 
@@ -697,7 +788,7 @@ def slda_E_step_for_doc(global_iteration,
         i += 1
 
         #print {'beta': beta, 'gamma': gamma, 'phi': phi, 'y': y, 'eta': eta}
-        print "{2}: e-step iteration {0} ELBO: {1}".format(i, local_elbo, global_iteration)
+        #print "{2}: e-step iteration {0} ELBO: {1}".format(i, local_elbo, global_iteration)
     print "{2}: done e-step on doc {3}: {0} iterations ELBO: {1}".format(i, local_elbo, global_iteration, d)
     return i
 
@@ -822,7 +913,7 @@ def lda_elbo_entropy(gamma, phi):
     elbo = 0.0
     (N,K) = phi.shape
     assert len(gamma) == K
-    elbo += -1 * np.sum(phi * np_log(phi))
+    elbo += -1 * np.sum(phi * np.log(phi))
 
     elbo += -1 * gammaln(np.sum(gamma))
     elbo += np.sum(gammaln(gamma))
@@ -846,7 +937,7 @@ def lm_elbo_y_from_small_phis(y, eta, phiD, phiC, sigma_squared):
     """
     elbo = 0.0
     ss = sigma_squared
-    elbo += (-0.5) * np_log(2 * np.pi * ss)
+    elbo += (-0.5) * np.log(2 * np.pi * ss)
     
     ez = calculate_EZ_from_small_phis(phiD, phiC)
     ezzt = calculate_EZZT_from_small_phis(phiD, phiC)
@@ -863,15 +954,15 @@ def slda_elbo_y(y, eta, phi, sigma_squared):
     """
     elbo = 0.0
     ss = sigma_squared
-    elbo += (-0.5) * np_log(2 * np.pi * ss)
+    elbo += (-0.5) * np.log(2 * np.pi * ss)
     
-    print 'will calculate ez...'
+    #print 'will calculate ez...'
     ez = calculate_EZ(phi)
-    print 'will calculate ezzt...'
+    #print 'will calculate ezzt...'
     ezzt = calculate_EZZT(phi)
-    print 'will calculate nEZZTn...'
+    #print 'will calculate nEZZTn...'
     nEZZTn = np.dot(np.dot(eta, ezzt), eta)
-    print 'will sum up elbo...'
+    #print 'will sum up elbo...'
     elbo += (-0.5 / ss) * (y*y - (2 * y * np.dot(eta, ez)) + nEZZTn)
     return elbo
     
@@ -910,7 +1001,7 @@ def lda_elbo_terms(document, alpha, beta, gamma, phi):
 
             # optimization:
             # E[log p(Zn|θ)] + E[log p(wn|Zn,β1:K)] = ΣKφn,k(E[log θk] + log βk,Wn)
-            elbo += np.sum(phi[n] * (ElogTheta + np_log(beta[:,word])))
+            elbo += np.sum(phi[n] * (ElogTheta + np.log(beta[:,word])))
 
     return elbo
 

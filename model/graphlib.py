@@ -121,7 +121,7 @@ def initialize_log_random(matrix):
     return matrix
 
 def elbo_did_not_converge(elbo, last_elbo, num_iter=0, 
-                          criterion=0.001, max_iter=20):
+                          criterion=0.001, min_iter=0, max_iter=20):
     """Accepts two elbo doubles.  
         Also accepts the number of iterations already performed in this loop.
         Also accepts convergence criterion: 
@@ -131,6 +131,9 @@ def elbo_did_not_converge(elbo, last_elbo, num_iter=0,
         Figures out whether the elbo is sufficiently smaller than
             last_elbo.
     """
+    if num_iter < min_iter:
+        return True
+
     if num_iter >= max_iter:
         return False
 
@@ -221,16 +224,19 @@ def run_variational_em(var, e_step_func, m_step_func, global_elbo_func, print_fu
 
     #for globaliternum in xrange(100):
     while elbo_did_not_converge(elbo, last_elbo, 
-                                         iterations, criterion=0.1, max_iter=20):
+                                iterations, criterion=0.1, max_iter=100):
         
         ### E-step ###
         local_i = e_step_func(iterations, var)
 
         m_step_func(var)
 
-        print 'will calculate global elbo...'
-        last_elbo = elbo
-        elbo = global_elbo_func(var)
+        if local_i < 20 and iterations >= 5 and iterations % 2 == 0:
+            print 'will calculate global elbo...'
+            last_elbo = elbo
+            elbo = global_elbo_func(var)
+        else:
+            print 'skip global elbo in first few iterations...'
 
         # todo: maybe write all these vars every iteration (or every 10) ?
         iterations += 1
@@ -240,7 +246,7 @@ def run_variational_em(var, e_step_func, m_step_func, global_elbo_func, print_fu
 
         #print final_output
         if print_func is not None:
-            print print_func(var)
+            print_func(var)
 
         print '{1} ({2} per doc) GLOBAL ELBO: {0}'.format(elbo, iterations, local_i)
 
@@ -291,6 +297,7 @@ def np_concatenate((a, b), axis=1):
 
 def matrix_multiply(a, b):
     """Takes two matrices and does a complicated matrix multiply.  Yes that one.
+    NOTE: THIS APPEARS TO BE VERY BROKEN
     """
     if len(a.shape) == 1:
         nrows, = a.shape
@@ -330,7 +337,9 @@ def np_diag(a):
         return np.diag(a)
 
 def np_second_arg_array_index(matrix, array):
-    """look at second part."""
+    """Calculates matrix[:,array]
+    NOTE: THIS APPEARS TO BE VERY BROKEN
+    """
     if ispypy():
         nrows,ncols = matrix.shape
         if len(array.shape) == 1:

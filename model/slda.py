@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+global final_output
+
 from itertools import chain,izip
 from functools import partial
 
@@ -126,11 +128,6 @@ class SupervisedLDAVars(graphlib.GraphVars):
         self.eta = graphlib.random_normal(0, 2.0, (K,))
         self.sigma_squared = 0.5
 
-        # EXPERIMENT
-        # Let's initialize eta so that it agrees with y at start
-        # hopefully this will keep y closer to gaussian centered at 0
-        #topiclib.slda_recalculate_eta_sigma(self.eta, self.y, self.phi)
-
         print 'eta start: {0}'.format(self.eta)
 
         self.is_initialized = True
@@ -140,8 +137,10 @@ class SupervisedLDAVars(graphlib.GraphVars):
                  'beta': self.beta, 'gamma': self.gamma, 'phi': self.phi, }
 
 def slda_e_step(global_iterations, v):
+    local_i = 0
     for d, (document,y) in enumerate(v.iterdocs()):
         local_i = topiclib.slda_E_step_for_doc(global_iterations,
+                                                local_i,
                                                 d, document, y,
                                                 v.alpha, v.beta,
                                                 v.gamma[d], v.phi[d],
@@ -160,9 +159,9 @@ def slda_m_step(var):
 
 
 def slda_print_func(var):
+    #print 'y: %s' % var.y
     print 'gamma: %s' % var.gamma
     print 'eta: %s' % var.eta
-    print 'y: %s' % var.y
     print 'ss: %s' % var.sigma_squared
 
 run_slda = partial(graphlib.run_variational_em, e_step_func=slda_e_step, 
@@ -218,7 +217,7 @@ if __name__=='__main__':
     y = np.loadtxt('synthtlc/yL.npy')
     real_data = (labeled_documents, y)
 
-    var = SupervisedLDAVars(real_data, K=25)
+    var = SupervisedLDAVars(real_data, K=13)
 
     try:
         output = run_slda(var)

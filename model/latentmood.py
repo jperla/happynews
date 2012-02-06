@@ -236,10 +236,9 @@ if __name__=='__main__':
                  [(5,1), (6,1), (7,1), (9,2),],
                 ])
 
-    '''
     import jsondata
-    numdocs = 100
-    limit_words = 500
+    numdocs = 1000000
+    limit_words = 50000000
     docs = jsondata.read('documents.dc.nyt.json')[:numdocs]
     docs = [d[:limit_words] for d in docs]
     comments = jsondata.read('comments.dc.nyt.json')[:numdocs]
@@ -249,12 +248,11 @@ if __name__=='__main__':
     print '%s total words in comments' % sum(len(c) for c in comments)
 
     real_data = [docs, comments]
-    '''
 
     
     var = LatentMoodVars(test_data, K=2, J=3)
     var = LatentMoodVars(noisy_test_data, K=2, J=3)
-    #var = LatentMoodVars(real_data, K=2, J=3)
+    var = LatentMoodVars(real_data, K=10, J=20)
 
     try:
         output = run_latent_mood(var)

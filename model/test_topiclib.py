@@ -98,6 +98,15 @@ def test_lda_recalculate_beta():
     assert not same(beta, out)
     assert same(out, answer)
 
+    # now test on docarray
+    out = beta.copy()
+    assert out.shape == (2,3)
+    lm.lda_recalculate_beta([lm.doc_to_array(t) for t in text], out, phi)
+    assert out.shape == (2,3)
+
+    assert not same(beta, out)
+    assert same(out, answer)
+
 
     # test log space
     log_out = np.log(out)
@@ -129,8 +138,8 @@ def test_calculate_big_phi():
                       ])
     assert same(out, answer)
 
-phi1 = [lm.row_normalize(np.ones((2,3))), ]
-phi2 = [lm.row_normalize(np.ones((3,2))), ]
+phi1 = [graphlib.row_normalize(np.ones((2,3))), ]
+phi2 = [graphlib.row_normalize(np.ones((3,2))), ]
 log_phi1, log_phi2 = np.log(phi1[0]), np.log(phi2[0])
 
 def test_calculate_EZ():
@@ -177,11 +186,11 @@ def test_calculate_EZZT():
     r1 = answer.copy()
     r1[0,0] = 5
     r1[1,1] = 9
-    r1 = lm.row_normalize(r1)
+    r1 = graphlib.row_normalize(r1)
     r2 = r1.copy()
     r1[1,1] = 2
     r1[1,0] = 1
-    r1 = lm.row_normalize(r1)
+    r1 = graphlib.row_normalize(r1)
 
     big_phi = lm.calculate_big_phi(r1, r2)
     answer = lm.calculate_EZZT(big_phi)
@@ -207,7 +216,6 @@ def test_lda_update_gamma():
 
     assert not same(out, gamma)
     assert same (out, answer)
-
 
     out = np.log(gamma.copy())
     lm.lda_update_log_gamma(np.log(alpha), np.log(phi), out)
@@ -254,7 +262,7 @@ def test_slda_update_phi():
     second_row = np.exp(term1 + term2 + term3 + term4)
     answer = np.array([first_row, second_row])
 
-    lm.row_normalize(answer)
+    graphlib.row_normalize(answer)
 
     out = phi.copy()
     lm.slda_update_phi(text, out, gamma, beta, y_d, eta, sigma_squared)

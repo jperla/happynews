@@ -6,7 +6,8 @@ def same(a, b):
     print a
     print b
     assert a.shape == b.shape
-    return np.all(np.abs(a-b) < 0.00000001)
+    return np.allclose(a, b)
+    #return np.all(np.abs(a-b) < 0.00000001)
 
 def test_logdot():
     from test_topiclib import phi1,phi2

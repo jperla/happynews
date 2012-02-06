@@ -4,16 +4,15 @@ from itertools import cycle, repeat
 
 import numpy as np
 
-import graphlib
 import topiclib
 
 Ku = 21
 Ks = 5
 Kb = 20
 
-D = 80
-L = 81
-B = 82
+D = 800
+L = 810
+B = 820
 
 W = 1000 # vocab size
 
@@ -23,7 +22,7 @@ N = 90 # every document has 100 words
 
 K = Ku + Ks + Kb
 
-eta = ([0.0] * Ku) + [e[1] for e in zip(range(Ks), cycle((+2.0,-2.0,-1.0,1.0)))] + ([0.0] * Kb)
+eta = ([0.0] * Ku) + [e[1] for e in zip(range(Ks), cycle((+2.1,-2.3,-1.2,1.0,0.0)))] + ([0.0] * Kb)
 sigma_squared = 0.01
 
 multiplier = 1.0
@@ -108,7 +107,7 @@ def save_sparse(filename, docs):
                 f.write('{0}:{1} '.format(w,n))
             f.write('\n')
 
-dirname = 'synthmodel'
+dirname = 'synthmedium'
 
 save_sparse(os.path.join(dirname, 'documents.dat'), documents)
 save_sparse(os.path.join(dirname, 'comments.dat'), comments)
