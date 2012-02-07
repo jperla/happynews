@@ -195,8 +195,8 @@ if __name__=='__main__':
 
 
     # use my big generated dataset
-    labeled_documents = topiclib.read_sparse('synthbig/labeled.dat')
-    y = np.loadtxt('synthbig/yL.npy')
+    labeled_documents = topiclib.read_sparse('data/synthbigtlc/labeled.dat')[:100]
+    y = np.loadtxt('data/synthbigtlc/yL.npy')[:100]
     real_data = (labeled_documents, y)
 
     var = PartialSupervisedLDAVars(real_data, Ks=5, Kb=20)

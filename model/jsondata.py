@@ -37,10 +37,14 @@ def save_data(filename, data):
             numpy.savez(filename + '.npy.list', *data)
         else:
             with open(filename, 'w') as f:
-                for i,d in enumerate(data):
-                    if i != 0:
-                        f.write('\n')
-                    f.write(json.dumps(d))
+                if hasattr(data, '__iter__'):
+                    for i,d in enumerate(data):
+                        if i != 0:
+                            f.write('\n')
+                        f.write(json.dumps(d))
+                else:
+                    f.write(json.dumps(data))
+
 
 def read_data(filename):
     """Accepts filename string.
