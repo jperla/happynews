@@ -103,8 +103,8 @@ class PartialSupervisedLDAVars(graphlib.GraphVars):
         self.gamma = np.ones((D, K)) * (1.0 / K)
         graphlib.initialize_random(self.gamma)
 
-        self.eta = graphlib.random_normal(0, 2.0, (Ks,))
-        self.sigma_squared = 0.01
+        self.eta = graphlib.random_normal(3, 2.0, (Ks,))
+        self.sigma_squared = 0.5
 
         print 'eta start: {0}'.format(self.eta)
 

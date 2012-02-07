@@ -28,4 +28,5 @@ if __name__ == '__main__':
                         o.write('%s\n' % ' '.join(betas))
                     else:
                         import pdb; pdb.set_trace()
+                        pass
 

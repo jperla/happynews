@@ -254,8 +254,10 @@ def tlc_print_func(var):
     
     # todo: predict y and calculate error
 
-def tlc_global_elbo(var):
-    return var.sigma_squared * 1000
+def tlc_global_elbo(v):
+    # use equivalent of pSLDA global elbo just for this since it's the important part
+    # it's more efficient to calculate than true elbo
+    return np.sum(topiclib.partial_slda_local_elbo(v.labeled[d], v.y[d], v.alphaL, v.beta[-v.Kl:], v.gammaL[d], v.phiL[d], v.eta, v.sigma_squared) for d in xrange(len(v.labeled)))
 
 run_tlc = partial(graphlib.run_variational_em, 
                     e_step_func=tlc_e_step, 

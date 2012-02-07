@@ -89,6 +89,7 @@ def pyfeatures_to_sparse_r_docs(features):
 if __name__ == '__main__':
     lexicon = dict([(a,i) for i,a in enumerate(jsondata.read('data/nytimes_med_common_vocab.json'))])
 
+    '''
     db = None
     try:
         import pymongo
@@ -121,20 +122,20 @@ if __name__ == '__main__':
     jsondata.save_data('titles.dc.nyt.json', titles)
     jsondata.save_data('documents.dc.nyt.json', docs)
     jsondata.save_data('comments.dc.nyt.json', comments)
+    '''
 
     '''
     #lexicon = dict([(a[0],i) for i,a in enumerate(jsondata.read('data/yelp_lexicon_med.json'))])
     #lexicon = dict([(a[0],i) for i,a in enumerate(jsondata.read('data/yelp_lexicon_small.json'))])
-    lexicon = dict([(a[0],i) for i,a in enumerate(jsondata.read('data/yelp_lexicon.json'))])
+    #lexicon = dict([(a[0],i) for i,a in enumerate(jsondata.read('data/yelp_lexicon.json'))])
     print 'lexi'
 
-    num_samples = 1000
+    '''
+    num_samples = 10000000
 
     data = [d for i,d in izip(xrange(num_samples), read_yelp_reviews())]
     
-    print 'd'
-    
-    # make sparse vectors!!
+    # make sparse vectors
     features = [dict() for i in xrange(len(data))]
     labels = [d['stars'] for d in data]
 
@@ -149,6 +150,12 @@ if __name__ == '__main__':
         print describe_bag(lexicon, features[-i])
         print data[-i]
 
+    labeled = [linearize(f) for f in features]
+    jsondata.save_data('yelp.nyt_med.json', labeled)
+    jsondata.save_data('yelp.labels.json', labels)
+
+
+    '''
     from rpy2 import robjects as ro
     r = ro.r
 

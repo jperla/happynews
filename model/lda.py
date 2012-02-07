@@ -137,28 +137,11 @@ run_lda = partial(graphlib.run_variational_em, e_step_func=lda_e_step,
 
             
 if __name__=='__main__':
-    # documents are 2-tuples of document, comment
-    noisy_test_data = [
-                 [(1,1), (2,1), (3,3), (5,2),], 
-                 [(0,1), (2,3), (3,1), (4,1),],
-                 [(1,2), (2,1), (4,2), (5,4),],
-                 [(5,1), (6,4), (7,1), (9,1),],
-                 [(5,2), (6,1), (7,2), (9,4),],
-                 [(5,1), (6,2), (7,2), (8,1),],
-                ]
-    test_data = [
-                 [(0,1), (2,2), (3,1), (4,1),],
-                 [(0,1), (2,1), (3,2), (4,3),],
-                 [(0,1), (2,3), (3,3), (4,1),],
-                 [(5,1), (6,2), (8,1), (9,3),],
-                 [(5,1), (6,2), (8,1), (9,1),],
-                 [(5,2), (6,1), (8,1), (9,1),],
-                ]
+    labeled_documents = jsondata.read('data/yelp.nyt_med.json')[:num_docs]
+    # filter out documents with no words
+    labeled_documents = [l for l in labeled_documents if len(l) > 0]
 
-    
-    var = LDAVars(test_data, K=3)
-    var = LDAVars(noisy_test_data, K=3)
-    #var = LDAVars(real_data, K=20)
+    var = LDAVars(labeled_documents, K=20)
 
     try:
         output = run_lda(var)
