@@ -1,5 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+    graphlib is a library with methods for working with probabilistic graphical models
+
+    It has methods for working with log probabilities, matrices, 
+        initialization, and variational Expectation Maximization
+    
+    Copyright (C) 2011 Joseph Perla
+
+    GNU Affero General Public License. See <http://www.gnu.org/licenses/>.
+"""
 
 import math
 import random
@@ -195,8 +205,8 @@ def run_variational_em(var, e_step_func, m_step_func, global_elbo_func, print_fu
                  Accepts the GraphVars variables state class.
                  Returns a double.
                     
-    print_func: useful for debugging. optional. Accepts local state. May print things.
-                 Accepts the GraphVars variables state class.
+    print_func: useful for debugging. optional. Accepts local state. May print or save vars.
+                 Accepts number of iterations int, and the GraphVars variables state class.
                  Returns nothing.
 
     Algorithm:
@@ -246,7 +256,7 @@ def run_variational_em(var, e_step_func, m_step_func, global_elbo_func, print_fu
 
         #print final_output
         if print_func is not None:
-            print_func(var)
+            print_func(iterations, var)
 
         print '{1} ({2} per doc) GLOBAL ELBO: {0}'.format(elbo, iterations, local_i)
 

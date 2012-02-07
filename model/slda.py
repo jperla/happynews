@@ -1,10 +1,19 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+    Uses graphlib and topiclib to run sLDA
+    
+    Copyright (C) 2011 Joseph Perla
+
+    GNU Affero General Public License. See <http://www.gnu.org/licenses/>.
+"""
 
 global final_output
 
 from itertools import chain,izip
 from functools import partial
+
+import jsondata
 
 try:
     import numpy as np
@@ -158,11 +167,14 @@ def slda_m_step(var):
     var.sigma_squared = topiclib.slda_recalculate_eta_sigma(var.eta, var.y, var.phi)
 
 
-def slda_print_func(var):
+def slda_print_func(i, var):
     #print 'y: %s' % var.y
     print 'gamma: %s' % var.gamma
     print 'eta: %s' % var.eta
     print 'ss: %s' % var.sigma_squared
+
+    if i % 5 == 0:
+        jsondata.save('slda-output-%s.dat' % i, var.to_dict())
 
 run_slda = partial(graphlib.run_variational_em, e_step_func=slda_e_step, 
                                                     m_step_func=slda_m_step, 

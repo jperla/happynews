@@ -1,5 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+    Uses graphlib and topiclib to run the Latent Response Mood Model
+    
+    Copyright (C) 2011 Joseph Perla
+
+    GNU Affero General Public License. See <http://www.gnu.org/licenses/>.
+"""
 
 from itertools import izip,chain
 from functools import partial

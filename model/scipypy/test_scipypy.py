@@ -1,3 +1,10 @@
+"""
+    Tests for scipypy library
+    
+    Copyright (C) 2011 Joseph Perla
+
+    GNU Affero General Public License. See <http://www.gnu.org/licenses/>.
+"""
 import scipypy
 import scipy.special
 

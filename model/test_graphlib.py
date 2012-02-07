@@ -1,3 +1,10 @@
+"""
+    Tests for graphlib library
+    
+    Copyright (C) 2011 Joseph Perla
+
+    GNU Affero General Public License. See <http://www.gnu.org/licenses/>.
+"""
 import numpy as np
 
 import graphlib

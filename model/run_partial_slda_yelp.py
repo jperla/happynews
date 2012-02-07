@@ -15,7 +15,10 @@ if __name__=='__main__':
     all_data = [(l,y) for l,y in izip(labeled_documents,y) if len(l) > 0]
     print len(all_data)
     labeled_documents = [a[0] for a in all_data]
-    y = [a[1] for a in all_data]
+
+    # norm this to around 2.0
+    # so that things without sentimental topics end up being neutral!
+    y = [(a[1] - 3.0) for a in all_data]
 
     real_data = (labeled_documents, y)
 

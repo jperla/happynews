@@ -1,5 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+    Uses graphlib and topiclib to run partial sLDA
+    
+    Copyright (C) 2011 Joseph Perla
+
+    GNU Affero General Public License. See <http://www.gnu.org/licenses/>.
+"""
 
 global final_output
 
@@ -103,7 +110,7 @@ class PartialSupervisedLDAVars(graphlib.GraphVars):
         self.gamma = np.ones((D, K)) * (1.0 / K)
         graphlib.initialize_random(self.gamma)
 
-        self.eta = graphlib.random_normal(3, 2.0, (Ks,))
+        self.eta = graphlib.random_normal(0, 2.0, (Ks,))
         self.sigma_squared = 0.5
 
         print 'eta start: {0}'.format(self.eta)

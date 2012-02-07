@@ -1,4 +1,11 @@
 #!/usr/bin/env python
+"""
+    Generates synethic data for the Transfer Learning Comment model.
+    
+    Copyright (C) 2011 Joseph Perla
+
+    GNU Affero General Public License. See <http://www.gnu.org/licenses/>.
+"""
 import os
 from itertools import cycle, repeat
 

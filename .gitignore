@@ -2,6 +2,9 @@ hnenv/*
 oldhnenv/*
 testmodel/*
 
+# slda source; unreleased yet
+ccode/src/* 
+
 *.json
 *.dat
 *.pyc

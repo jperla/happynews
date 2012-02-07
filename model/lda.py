@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
 from itertools import chain
 from functools import partial
+
+import jsondata
 
 try:
     import numpy as np
@@ -114,8 +115,10 @@ class LDAVars(graphlib.GraphVars):
         return { 'beta': self.beta, 'gamma': self.gamma, 'phi': self.phi, }
 
 def lda_e_step(global_iterations, v):
+    local_i = 0
     for d, document in enumerate(v.iterdocs()):
         local_i = topiclib.lda_E_step_for_doc(global_iterations, 
+                                                local_i,
                                                 d, document,
                                                 v.alpha, v.beta,
                                                 v.gamma[d], v.phi[d])
@@ -125,9 +128,12 @@ def lda_m_step(var):
     print 'updating betas..'
     topiclib.lda_recalculate_beta(var.documents, var.beta, var.phi)
 
-def lda_print_func(var):
+def lda_print_func(i, var):
     #print 'phi: %s' % var.phi
     print 'gamma: %s' % var.gamma
+
+    if i % 5 == 0:
+        jsondata.save('lda-output-%i.dat' % i, var.to_dict())
 
 run_lda = partial(graphlib.run_variational_em, e_step_func=lda_e_step, 
                                                     m_step_func=lda_m_step, 

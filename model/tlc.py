@@ -1,7 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+    Uses graphlib and topiclib to run TLC model
+    
+    Copyright (C) 2011 Joseph Perla
+
+    GNU Affero General Public License. See <http://www.gnu.org/licenses/>.
+"""
 
 global final_output
+
+import jsondata
 
 from itertools import chain,izip
 from functools import partial
@@ -228,17 +237,17 @@ def tlc_m_step(var):
     Ku, Ks, Kb = var.Ku, var.Ks, var.Kb
     
     # update unlabeled document topics
-    dc = np.concatenate((var.documents, var.comments))
+    dc = var.documents + var.comments
     phi_dc = var.phiD + [p[:,:Ku] for p in var.phiC]
     topiclib.lda_recalculate_beta(dc, var.beta[:Ku], phi_dc)
 
     # update sentiment topics
-    cl = np.concatenate((var.comments, var.labeled))
+    cl = var.comments + var.labeled
     phi_cl = [p[:,-Ks:] for p in var.phiC] + [p[:,:Ks] for p in var.phiL]
     topiclib.lda_recalculate_beta(cl, var.beta[Ku:Ku+Ks], phi_cl)
 
     # update background topics
-    lb = np.concatenate((var.labeled, var.background))
+    lb = var.labeled + var.background
     phi_lb = [p[:,-Kb:] for p in var.phiL] + var.phiB
     topiclib.lda_recalculate_beta(lb, var.beta[-Kb:], phi_lb)
 
@@ -247,11 +256,13 @@ def tlc_m_step(var):
     var.sigma_squared = topiclib.partial_slda_recalculate_eta_sigma(var.eta, var.y, var.phiL)
 
 
-def tlc_print_func(var):
+def tlc_print_func(i, var):
     #print 'y: %s' % var.y
     print 'eta: %s' % var.eta
     print 'ss: %s' % var.sigma_squared
     
+    if i % 5 == 0:
+        jsondata.save('mytlc-output-%s.dat' % i, var.to_dict())
     # todo: predict y and calculate error
 
 def tlc_global_elbo(v):
@@ -280,7 +291,7 @@ if __name__=='__main__':
     y = np.loadtxt(dirname + '/yL.npy')
     real_data = (documents, comments, labeled_documents, background, y)
 
-    var = TLCVars(real_data, Ku=21, Ks=5, Kb=20)
+    var = TLCVars(real_data, Ku=29, Ks=5, Kb=24)
 
     try:
         output = run_tlc(var)

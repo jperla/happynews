@@ -1,3 +1,10 @@
+"""
+    Tests for topiclib library
+    
+    Copyright (C) 2011 Joseph Perla
+
+    GNU Affero General Public License. See <http://www.gnu.org/licenses/>.
+"""
 # -*- coding: utf-8 -*-
 
 import numpy as np

@@ -1,8 +1,10 @@
 #!/usr/bin/env python
+import jsondata
+
 import lda
 
 if __name__=='__main__':
-    labeled_documents = jsondata.read('data/yelp.nyt_med.json')
+    labeled_documents = jsondata.read('data/yelp.nyt_med.json')[:100]
     # filter out documents with no words
     labeled_documents = [l for l in labeled_documents if len(l) > 0]
 

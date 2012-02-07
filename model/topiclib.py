@@ -1,5 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
+"""
+    a library for working with topic graphical models like LDA and sLDA
+
+    Also works with partial sLDA and TLC. Uses graphlib.
+    
+    Copyright (C) 2011 Joseph Perla
+
+    GNU Affero General Public License. See <http://www.gnu.org/licenses/>.
+"""
 
 from itertools import repeat
 
@@ -139,7 +149,7 @@ def slda_recalculate_eta_sigma(eta, y, phi):
 
     """
     assert len(eta) == phi.shape[1]
-    partial_slda_recalculate_eta_sigma(eta, y, phi)
+    return partial_slda_recalculate_eta_sigma(eta, y, phi)
 
 def partial_slda_recalculate_eta_sigma(eta, y, phi):
     """
