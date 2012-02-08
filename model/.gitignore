@@ -1,6 +1,9 @@
 *.json
 *.dat
 *.npy
+*.gz
+*.npz
+
 *.output
 
 viccidata/*

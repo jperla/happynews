@@ -236,17 +236,17 @@ def tlc_m_step(var):
     print 'updating betas..'
     Ku, Ks, Kb = var.Ku, var.Ks, var.Kb
     
-    # update unlabeled document topics
+    print 'update unlabeled document topics..'
     dc = var.documents + var.comments
     phi_dc = var.phiD + [p[:,:Ku] for p in var.phiC]
     topiclib.lda_recalculate_beta(dc, var.beta[:Ku], phi_dc)
 
-    # update sentiment topics
+    print 'update sentiment topics...'
     cl = var.comments + var.labeled
     phi_cl = [p[:,-Ks:] for p in var.phiC] + [p[:,:Ks] for p in var.phiL]
     topiclib.lda_recalculate_beta(cl, var.beta[Ku:Ku+Ks], phi_cl)
 
-    # update background topics
+    print 'update background topics...'
     lb = var.labeled + var.background
     phi_lb = [p[:,-Kb:] for p in var.phiL] + var.phiB
     topiclib.lda_recalculate_beta(lb, var.beta[-Kb:], phi_lb)

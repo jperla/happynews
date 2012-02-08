@@ -148,7 +148,7 @@ def slda_recalculate_eta_sigma(eta, y, phi):
         (Also, note that E[Z] = φ := (1/N)Σnφn, and E[ZdZdT] = (1/N2)(ΣnΣm!=nφd,nφd,mT  +  Σndiag{φd,n})
 
     """
-    assert len(eta) == phi.shape[1]
+    ensure(len(eta) == phi.shape[1])
     return partial_slda_recalculate_eta_sigma(eta, y, phi)
 
 def partial_slda_recalculate_eta_sigma(eta, y, phi):
@@ -158,7 +158,7 @@ def partial_slda_recalculate_eta_sigma(eta, y, phi):
           Will only update based on first Ks topics of phi
     """
     D = len(phi)
-    assert D >= 1
+    ensure(D >= 1)
 
     N,K = phi[0].shape
     Ks = len(eta)
@@ -192,7 +192,7 @@ def lm_recalculate_eta_sigma(eta, y, phi1, phi2):
         (Also note that the dth row of E[A] is φd, and E[ATA] = Σd E[ZdZdT] .)
         (Also, note that E[Z] = φ := (1/N)Σnφn, and E[ZdZdT] = (1/N2)(ΣnΣm!=nφd,nφd,mT  +  Σndiag{φd,n})
     """
-    assert len(phi1) == len(phi2)
+    ensure(len(phi1) == len(phi2))
     D = len(phi1)
 
     Nd,K = phi1[0].shape
@@ -309,7 +309,7 @@ def calculate_EZZT_from_small_phis(phi1, phi2):
 
     big_phi_sum = np.concatenate((np.sum(phi1, axis=0),
                                   np.sum(phi2, axis=0)), axis=1)
-    assert big_phi_sum.shape == (KJ,)
+    ensure(big_phi_sum.shape == (KJ,))
     inner_sum += np.diag(big_phi_sum)
 
     inner_sum /= (Ndc * Ndc)
@@ -355,7 +355,7 @@ def calculate_EZZT_from_small_log_phis(phi1, phi2):
 
     big_phi_sum = np.concatenate((logsumexp(phi1, axis=0),
                                   logsumexp(phi2, axis=0)), axis=1)
-    assert big_phi_sum.shape == (KJ,)
+    ensure(big_phi_sum.shape == (KJ,))
     for i in xrange(KJ):
         inner_sum[i,i] = logsumexp([inner_sum[i,i], big_phi_sum[i]])
 
@@ -389,7 +389,7 @@ def calculate_E_ATA_inverse(phi):
     D = len(phi)
     N,K = phi[0].shape
     E_ATA = sum(calculate_EZZT(phi[d]) for d in xrange(D))
-    assert E_ATA.shape == (K, K)
+    ensure(E_ATA.shape == (K, K))
 
     print 'inverse...'
     # todo: does not work in pypy
@@ -407,7 +407,7 @@ def calculate_E_ATA_inverse_from_small_phis(phi1, phi2):
     Nc,J = phi2[0].shape
     (Ndc, KJ) = (Nd+Nc, K+J)
     E_ATA = sum(calculate_EZZT_from_small_phis(phi1[d], phi2[d]) for d in xrange(D))
-    assert E_ATA.shape == (KJ, KJ)
+    ensure(E_ATA.shape == (KJ, KJ))
 
     # todo: this does not work in pypy
     return np.linalg.inv(E_ATA)
@@ -421,7 +421,7 @@ def lda_update_gamma(alpha, phi, gamma):
 
      update gamma: γnew ← α + Σnφn
     """
-    assert phi.shape[1] == len(gamma)
+    ensure(phi.shape[1] == len(gamma))
     gamma[:] = alpha + np.sum(phi, axis=0)
     return gamma
 
@@ -431,7 +431,7 @@ def lda_update_log_gamma(log_alpha, log_phi, log_gamma):
      Same as lda_update_gamma, 
         but in log probability space.
     """
-    assert log_phi.shape[1] == len(log_gamma)
+    ensure(log_phi.shape[1] == len(log_gamma))
     log_gamma[:] = logsumexp([log_alpha, logsumexp(log_phi, axis=0)], axis=0)
     return log_gamma
 
@@ -458,7 +458,7 @@ def _unoptimized_slda_update_phi(text, phi, gamma, beta, y_d, eta, sigma_squared
     phi_sum = np.sum(phi, axis=0)
     Ns = (N * sigma_squared)
     ElogTheta = graphlib.dirichlet_expectation(gamma)
-    assert len(ElogTheta) == K
+    ensure(len(ElogTheta) == K)
 
     pC = (1.0 * y_d / Ns * eta)  
     eta_dot_eta = (eta * eta)
@@ -466,14 +466,14 @@ def _unoptimized_slda_update_phi(text, phi, gamma, beta, y_d, eta, sigma_squared
 
     for n,word,count in iterwords(text):
         phi_sum -= phi[n]
-        assert len(phi_sum) == K
+        ensure(len(phi_sum) == K)
 
         pB = np.log(beta[:,word])
         pD = (front * (((2 * np.dot(eta, phi_sum) * eta) + eta_dot_eta))
                             )
-        assert len(pB) == K
-        assert len(pC) == K
-        assert len(pD) == K
+        ensure(len(pB) == K)
+        ensure(len(pC) == K)
+        ensure(len(pD) == K)
 
         # must exponentiate and sum immediately!
         #phi[n,:] = np.exp(ElogTheta + pB + pC + pD)
@@ -513,7 +513,7 @@ def lda_update_phi(text, phi, gamma, beta, normalize=True, logspace=False):
     ElogTheta = graphlib.dirichlet_expectation(gamma)
 
     # todo: call a log version of this in slda and others!
-    assert isinstance(text, np.ndarray)
+    ensure(isinstance(text, np.ndarray))
     phi[:,:] = ElogTheta + np.log(beta[:,text].T)
     if normalize:
         graphlib.log_row_normalize(phi)
@@ -538,7 +538,7 @@ def slda_update_phi(text, phi, gamma, beta, y_d, eta, sigma_squared):
     If len(eta) < phi.shape[1], then it is a Partial update.
         Same as slda update phi, but eta only acts on first few topics in phi.
     """
-    assert len(eta) == phi.shape[1]
+    ensure(len(eta) == phi.shape[1])
     partial_slda_update_phi(text, phi, gamma, beta, y_d, eta, sigma_squared)
 
 def partial_slda_update_phi(text, phi, gamma, beta, y_d, eta, sigma_squared):
@@ -604,7 +604,7 @@ def slda_update_log_phi(text, log_phi, log_gamma, log_beta, y_d, eta, sigma_squa
 
     log_right_eta_times_const = np.log(front * 2 * eta)
 
-    assert isinstance(text, np.ndarray)
+    ensure(isinstance(text, np.ndarray))
 
     # if text is in array form, do an approximate fast matrix update
     log_phi_minus_n = -1 + (logsumexp([log_phi, (-1 + log_phi_sum)]))
@@ -741,7 +741,7 @@ def partial_slda_E_step_for_doc(global_iteration,
         lda_update_gamma(alpha, phi, gamma)
 
         #print 'will update phis...'
-        assert len(eta) < phi.shape[1] #otherwise it's a full update
+        ensure(len(eta) < phi.shape[1]) #otherwise it's a full update
         partial_slda_update_phi(document, phi, gamma, beta, y, eta, sigma_squared)
 
         # speed things up by maxing out in first five E runs
@@ -922,14 +922,14 @@ def lda_elbo_entropy(gamma, phi):
     """
     elbo = 0.0
     (N,K) = phi.shape
-    assert len(gamma) == K
+    ensure(len(gamma) == K)
     elbo += -1 * np.sum(phi * np.log(phi))
 
     elbo += -1 * gammaln(np.sum(gamma))
     elbo += np.sum(gammaln(gamma))
 
     ElogTheta = graphlib.dirichlet_expectation(gamma)
-    assert ElogTheta.shape == gamma.shape
+    ensure(ElogTheta.shape == gamma.shape)
     elbo += -1 * sum((gamma - 1) * ElogTheta)
 
     return elbo

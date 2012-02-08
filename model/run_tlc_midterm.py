@@ -30,7 +30,7 @@ if __name__=='__main__':
     real_data = (documents, comments, labeled_documents, background, y)
 
     var = tlc.TLCVars(real_data, Ku=25, Ks=5, Kb=25)
-    var.eta = np.array([2.0, 1.0, 0.5, -1.0, -2.0])
+    var.eta = np.array([3.0, 1.5, 0.5, -1.5, -3.0])
 
     try:
         output = tlc.run_tlc(var)

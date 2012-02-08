@@ -31,7 +31,8 @@ INITIAL_ELBO = float('-inf')
 
 def ensure(boolean, message=''):
     """Wrapper for assert. Let's me turn it on/off globally."""
-    assert boolean, message
+    pass
+    #assert boolean, message
 
 def logsumexp(a, axis=0):
     """Same as sum, but in log space. Compare to logaddexp."""
@@ -262,6 +263,10 @@ def run_variational_em(var, e_step_func, m_step_func, global_elbo_func, print_fu
 
     return final_output
 
+
+def logistic_sigmoid(v):
+    """Returns 1 / (1 + e^(-v))"""
+    return 1.0 / (1 + np.exp(-v))
 
 ########### PYPY-only functions! ###########
 this_is_pypy = ('matrix' in dir(np))
