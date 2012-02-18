@@ -195,6 +195,8 @@ if __name__=='__main__':
 
 
     # use my big generated dataset
+    n = 9994
+
     labeled_documents = topiclib.read_sparse('data/synthbigtlc/labeled.dat')[:100]
     y = np.loadtxt('data/synthbigtlc/yL.npy')[:100]
     real_data = (labeled_documents, y)

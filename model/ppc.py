@@ -112,7 +112,7 @@ class PosteriorPredictiveChecks(object):
         # now return all discrepancies
         return (minimum_discrepancy, [self.discrepancy(min_posterior, s) for s in simulated])
 
-    def simulated_lines(self, global_params, local_params, observed_values):
+    def simulated_lines(self, global_params, local_params, observed_values, num_points, num_lines):
         """Accepts global parameters dictionary.
             Also accepts a list of dictionaries of local parameters.
             Finally a list of observed values which should be same size as local parameters.
@@ -126,8 +126,14 @@ class PosteriorPredictiveChecks(object):
                         for p,l,o in self.iterpost(global_params, local_params, observed_values)]
             return list(sorted(line))
 
-        num_lines = 9
+        # shrink number of points
+        p = zip(local_params, observed_values)
+        np.random.shuffle(p)
+        p = p[:num_points]
+        local_params,observed_values = [a[0] for a in p], [a[1] for a in p]
+
         real_line = generate_linegraph(global_params, local_params, observed_values)
+
 
         simulated = [[self.simulate(p, o)
                         for p,l,o in self.iterpost(global_params, local_params, observed_values)]
@@ -152,18 +158,14 @@ class TLCPPC(PosteriorPredictiveChecks):
         N,K = phi.shape
         assert No == N
         assert K == beta.shape[0]
+        K,W = beta.shape
 
-        topics = [np.random.multinomial(1, phi) for n in xrange(N)]
-        words = [np.random.multinomial(1, beta[t]) for t in topics]
-    
-        d = {}
-        for w in words:
-            if w in d:
-                d[w] += 1
-            else:
-                d[w] = 1
+        topics = np.sum(np.array([np.random.multinomial(1, phi[n]) for n in xrange(N)]), axis=0)
+        assert len(topics) == K
+        words = np.sum(np.array([np.random.multinomial(count, beta[k]) for k,count in enumerate(topics)]), axis=0)
+        assert len(words) == W
 
-        return list(sorted((w,c) for w,c in d))
+        return [(w,c) for w,c in enumerate(words)]
         
     def posterior_norm(self, posterior):
         """Accepts posterior, which is dictionary of phi, beta, eta, sigma squared.
@@ -228,6 +230,16 @@ class YelpSentimentPartialSLDAPPC(TLCPPC):
         return observed
 
 class YelpSentimentTLCPPC(TLCPPC):
+    def posterior_norm(self, posterior):
+        """Posterior contains phiC, whose *last* topics contain the sentiment topics."""
+        p = posterior.copy()
+
+        phi = p['phi']
+        eta = p['eta']
+        Ks = len(eta)
+        p['phi'] = phi[:,-Ks:]
+        return TLCPPC.posterior_norm(self, p)
+
     def observed_norm(self, observed):
         """Accepts a sparse vector of word, list of (word int,count) 2-tuples.
             Returns real number between -2 and 2.
@@ -259,42 +271,32 @@ class YelpSentimentTLCPPC(TLCPPC):
             return (4 * o) - 2 # norm to -2 to 2
 
 
+import matplotlib.pyplot as plot
+def save_figures(name, scatterplot, lines):
+    #TODO: jperla: this needs to be better; cant hardcode everything
+    first = lambda x: list(a[0] for a in x)
+    second = lambda x: list(a[1] for a in x)
 
-if __name__=='__main__':
-    s = 'medsldamodel/med-slda.final-%s.dat'
+    # make graphs
+    plot.figure(1)
+    plot.grid(True)
+    plot.scatter(first(scatterplot), second(scatterplot), 20, 'k', '.')
+    plot.axis([0, 3.5, 0, 3.5])
+    plot.plot([0, 3.5], [0, 3.5], ':')
+    plot.xlabel(r'D(y,$\theta$)')
+    plot.ylabel(r'D($y^{rep}$,$\theta$)')
+    plot.title('Posterior Predictive Check Scatterplot')
+    plot.savefig(name + '-ppc-scatterplot.png')
+    #plot.legend(('sample1','sample2'))
 
-    eta = np.array(jsondata.read(s % 'eta'))
-    beta = np.array(jsondata.read(s % 'beta'))
-    phi = [np.array(p) for p in jsondata.read(s % 'phi')]
-    sigma_squared = jsondata.read(s % 'sigma_squared')[0]
-
-    print 'finished reading in params...'
-    global_params = {'eta': eta, 'beta': beta, 'sigma_squared': sigma_squared}
-    local_params = [{'phi': p} for p in phi]
-
-    # get the data
-    num_docs = 1000
-    #labeled_documents = jsondata.read('data/yelp.nyt_med.json')[:num_docs]
-    y = jsondata.read('data/yelp.labels.json')[:num_docs]
-
-    #// filter out documents with no words
-    #all_data = [(l,y) for l,y in izip(labeled_documents,y) if len(l) > 0]
-    #print 'num docs: ' + len(all_data)
-    #labeled_documents = [a[0] for a in all_data]
-
-    # norm this to around 2.0
-    # so that things without sentimental topics end up being neutral!
-    #y = [(a[1] - 3.0) for a in all_data]
-    print 'finished reading in docs...'
-
-    # note, only y needs to be observed; not the words
-    #observed_values = [y for l,y in izip(labeled_documents, y)]
-    observed_values = [(i - 3.0) for i in y]
-
-    print 'finished reading in docs...'
-
-    ppc = YelpSentimentPartialSLDAPPC()
-
-    scatterplot = ppc.scatterplot(global_params, local_params, observed_values)
-    lines = ppc.simulated_lines(global_params, local_params, observed_values)
+    plot.figure(2)
+    plot.axis([-2, 2, -2, 2])
+    for p in lines[1]:
+        plot.plot(first(p), second(p), 'b-.')
+    plot.plot(first(lines[0]), second(lines[0]), 'k-')
+    plot.xlabel(r'$\eta^T E[\bar z]$')
+    #plot.xlabel(r'Positive vs Negative words')
+    plot.ylabel(r'Observed Rating')
+    plot.title('Posterior Predictive Check Simulated Draws')
+    plot.savefig(name + '-ppc-lines.png')
 

@@ -6,5 +6,8 @@
 
 *.output
 
+*.json.original
+*.png
+
 viccidata/*
 synthtlc/*

@@ -5,20 +5,19 @@ import jsondata
 import partial_slda
 
 if __name__=='__main__':
-    num_docs = 10000
+    num_docs = 9994
+    num_docs = 300
 
     # use my big generated dataset
     labeled_documents = jsondata.read('data/yelp.nyt_med.json')[:num_docs]
     y = jsondata.read('data/yelp.labels.json')[:num_docs]
 
     #// filter out documents with no words
-    all_data = [(l,y) for l,y in izip(labeled_documents,y) if len(l) > 0]
-    print len(all_data)
-    labeled_documents = [a[0] for a in all_data]
+    # already manually filtered out in first 9994 documents!!
 
     # norm this to around 2.0
     # so that things without sentimental topics end up being neutral!
-    y = [(a[1] - 3.0) for a in all_data]
+    y = [(i - 3.0) for i in y]
 
     real_data = (labeled_documents, y)
 

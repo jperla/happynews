@@ -13,20 +13,19 @@ import sys
 import jsondata
 
 if __name__=='__main__':
-    data_filename = sys.argv[1]
+    beta_filename = sys.argv[1]
     vocab_filename = sys.argv[2]
     words_per_topic = int(sys.argv[3])
+    eta_filename = sys.argv[4] if len(sys.argv) > 4 else None
 
     associated_filename = sys.argv[5] if len(sys.argv) > 5 else None
 
-    data = jsondata.read(data_filename)[0]
+    beta = jsondata.read(beta_filename)
     lexicon = jsondata.read(vocab_filename)
 
-    beta = data['beta']
-
     eta = None
-    if 'eta' in data:
-        eta = data['eta']
+    if eta_filename is not None:
+        eta = jsondata.read(eta_filename)
 
     print 'eta: %s' % eta
 

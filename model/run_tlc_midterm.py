@@ -7,7 +7,7 @@ import tlc
 from itertools import izip
 
 if __name__=='__main__':
-    num_labeled = 10000
+    num_labeled = 9994
 
     cut_short = 100000000000
 
@@ -19,13 +19,6 @@ if __name__=='__main__':
 
     y = jsondata.read('data/yelp.labels.json')[:num_labeled][:cut_short]
     y = [(i - 3.0) for i in y] # center around 0
-
-
-    # filter out documents with no words
-    all_data = [(l,i) for l,i in izip(labeled_documents,y) if len(l) > 0]
-    print len(all_data)
-    labeled_documents = [a[0] for a in all_data]
-    y = [a[1] for a in all_data]
 
     real_data = (documents, comments, labeled_documents, background, y)
 
