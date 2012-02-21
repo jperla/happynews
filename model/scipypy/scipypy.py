@@ -1,10 +1,10 @@
 import math
 
 try:
+    import numpypy as np
+except ImportError:
     import numpy as np
     np.seterr(invalid='raise')
-except:
-    import numpypy as np
 
 def numpyarray(f):
     def decorator(xx, *args, **kwargs):

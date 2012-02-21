@@ -16,10 +16,9 @@ import random
 from itertools import izip
 
 try:
-    import numpy as np
-except ImportError:
     import numpypy as np
-else:
+except ImportError:
+    import numpy as np
     np.seterr(invalid='raise')
 
 try:
@@ -349,7 +348,7 @@ def np_diag(a):
             n[i,i] = a[i]
         return n
     else:
-        return np.diag(a)
+        return np.diagonal(a)
 
 def np_second_arg_array_index(matrix, array):
     """Calculates matrix[:,array]

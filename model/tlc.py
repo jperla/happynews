@@ -16,11 +16,10 @@ from itertools import chain,izip
 from functools import partial
 
 try:
+    import numpypy as np
+except ImportError:
     import numpy as np
     np.seterr(invalid='raise')
-except:
-    import numpypy as np
-
 
 import graphlib
 import topiclib

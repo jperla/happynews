@@ -14,9 +14,9 @@
 import json
 
 try:
-    import numpy
-except:
     import numpypy as numpy
+except:
+    import numpy
 
 def save_data(filename, data):
     """Accepts filenamestring and a list of objects, probably dictionaries.

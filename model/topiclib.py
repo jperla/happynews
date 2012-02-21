@@ -14,10 +14,9 @@
 from itertools import repeat
 
 try:
-    import numpy as np
-except ImportError:
     import numpypy as np
-else:
+except ImportError:
+    import numpy as np
     np.seterr(invalid='raise')
 
 try:
@@ -290,12 +289,12 @@ def calculate_EZZT_from_small_phis(phi1, phi2):
     for i in xrange(K):
         for j in xrange(K):
             m = np.dot(np.matrix(p1[:,i]), np.matrix(p1[:,j]).T)
-            inner_sum[i,j] = np.sum(m) - np.sum(np.diag(m))
+            inner_sum[i,j] = np.sum(m) - np.sum(np.diagonal(m))
 
     for i in xrange(J):
         for j in xrange(J):
             m = np.dot(np.matrix(p2[:,i]), np.matrix(p2[:,j]).T)
-            inner_sum[K+i,K+j] = np.sum(m) - np.sum(np.diag(m))
+            inner_sum[K+i,K+j] = np.sum(m) - np.sum(np.diagonal(m))
 
     for i in xrange(K):
         for j in xrange(J):
@@ -310,7 +309,7 @@ def calculate_EZZT_from_small_phis(phi1, phi2):
     big_phi_sum = np.concatenate((np.sum(phi1, axis=0),
                                   np.sum(phi2, axis=0)), axis=1)
     ensure(big_phi_sum.shape == (KJ,))
-    inner_sum += np.diag(big_phi_sum)
+    inner_sum += np.diagonal(big_phi_sum)
 
     inner_sum /= (Ndc * Ndc)
     return inner_sum
@@ -334,13 +333,13 @@ def calculate_EZZT_from_small_log_phis(phi1, phi2):
     for i in xrange(K):
         for j in xrange(K):
             m = logdotexp(np.matrix(p1[:,i]), np.matrix(p1[:,j]).T)
-            m += np.diag(np.ones(Nd) * -1000)
+            m += np.diagonal(np.ones(Nd) * -1000)
             inner_sum[i,j] = logsumexp(m.flatten())
 
     for i in xrange(J):
         for j in xrange(J):
             m = logdotexp(np.matrix(p2[:,i]), np.matrix(p2[:,j]).T)
-            m += np.diag(np.ones(Nc) * -1000)
+            m += np.diagonal(np.ones(Nc) * -1000)
             inner_sum[K+i,K+j] = logsumexp(m.flatten())
 
     for i in xrange(K):
@@ -376,7 +375,7 @@ def calculate_EZZT(big_phi):
     for i in xrange(K):
         for j in xrange(K):
             inner_sum[i,j] = np.sum(np.multiply.outer(big_phi[:,i], big_phi[:,j])) - np.sum(np.dot(big_phi[:,i], big_phi[:,j]))
-    inner_sum += np.diag(np.sum(big_phi, axis=0))
+    inner_sum += np.diagonal(np.sum(big_phi, axis=0))
     inner_sum /= (N * N)
     return inner_sum
 

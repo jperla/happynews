@@ -6,10 +6,10 @@ from functools import partial
 import jsondata
 
 try:
+    import numpypy as np
+except ImportError:
     import numpy as np
     np.seterr(invalid='raise')
-except:
-    import numpypy as np
 
 
 import graphlib
