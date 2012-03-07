@@ -165,6 +165,18 @@ class TLCVars(graphlib.GraphVars):
         background_Nds = self.num_words_per(self.background)
         self.phiB = uniform_phi(background_Nds, self.Kb)
 
+        self.num_document_words = sum(document_Nds)
+        self.num_comment_words = sum(comment_Nds)
+        self.num_labeled_words = sum(labeled_Nds)
+        self.num_background_words = sum(background_Nds)
+
+        biggest = float(max(self.num_document_words, self.num_comment_words,
+                      self.num_labeled_words, self.num_background_words))
+        self.document_multiplier = biggest / self.num_document_words
+        self.comment_multiplier = biggest / self.num_comment_words
+        self.labeled_multiplier = biggest / self.num_labeled_words
+        self.background_multiplier = biggest / self.num_background_words
+
         self.gammaD = np.ones((self.D, self.Ku)) * (1.0 / self.Ku)
         self.gammaC = np.ones((self.D, self.Kc)) * (1.0 / self.Kc)
         self.gammaL = np.ones((self.L, self.Kl)) * (1.0 / self.Kl)
@@ -183,10 +195,10 @@ class TLCVars(graphlib.GraphVars):
 
     def to_dict(self):
         return { 
-    'eta': self.eta, 'sigma_squared': self.sigma_squared,
-    'beta': self.beta, 
-    'gammaD': self.gammaD, 'gammaC': self.gammaC, 'gammaL': self.gammaL, 'gammaB': self.gammaB,
-    'phiD': self.phiD, 'phiC': self.phiC, 'phiL': self.phiL, 'phiB': self.phiB,
+            'eta': self.eta, 'sigma_squared': self.sigma_squared,
+            'beta': self.beta, 
+            'gammaD': self.gammaD, 'gammaC': self.gammaC, 'gammaL': self.gammaL, 'gammaB': self.gammaB,
+            'phiD': self.phiD, 'phiC': self.phiC, 'phiL': self.phiL, 'phiB': self.phiB,
     }
 
 def tlc_e_step(global_iterations, v):
@@ -237,17 +249,18 @@ def tlc_m_step(var):
     
     print 'update unlabeled document topics..'
     dc = var.documents + var.comments
-    phi_dc = var.phiD + [p[:,:Ku] for p in var.phiC]
+    #phi_dc = var.phiD + [p[:,:Ku] for p in var.phiC]
+    phi_dc = [d*var.document_multiplier for d in var.phiD] + [var.comment_multiplier*p[:,:Ku] for p in var.phiC]
     topiclib.lda_recalculate_beta(dc, var.beta[:Ku], phi_dc)
 
     print 'update sentiment topics...'
     cl = var.comments + var.labeled
-    phi_cl = [p[:,-Ks:] for p in var.phiC] + [p[:,:Ks] for p in var.phiL]
+    phi_cl = [var.comment_multiplier*p[:,-Ks:] for p in var.phiC] + [var.labeled_multiplier*p[:,:Ks] for p in var.phiL]
     topiclib.lda_recalculate_beta(cl, var.beta[Ku:Ku+Ks], phi_cl)
 
     print 'update background topics...'
     lb = var.labeled + var.background
-    phi_lb = [p[:,-Kb:] for p in var.phiL] + var.phiB
+    phi_lb = [var.labeled_multiplier*p[:,-Kb:] for p in var.phiL] + [var.background_multiplier*b for b in var.phiB]
     topiclib.lda_recalculate_beta(lb, var.beta[-Kb:], phi_lb)
 
     print 'eta sigma...'

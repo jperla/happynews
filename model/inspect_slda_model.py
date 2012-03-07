@@ -8,10 +8,11 @@
 
     GNU Affero General Public License. See <http://www.gnu.org/licenses/>.
 """
-import numpy as np
-
+import random
 import sys
 import jsondata
+
+import numpy as np
 
 if __name__=='__main__':
     phi_filename = sys.argv[1]
@@ -44,10 +45,19 @@ if __name__=='__main__':
     predicted_ratings = list(sorted((predict(eta, p),i) for i,p in enumerate(phi)))
     print 'predicted ratings...'
 
-    #print 'most positive...'
-    for predicted,d in predicted_ratings[:num_docs]:
-        print predicted, associated[d]
+    print 'most positive...'
+    p = predicted_ratings[:num_docs]
+    random.shuffle(p)
+    for predicted,d in p:
+        #print predicted, associated[d]
+        print '%s (%s)' % (associated[d][1], d)
 
-    #print 'negative...'
-    for predicted,d in predicted_ratings[-num_docs:]:
-        print predicted, associated[d]
+    print 'negative...'
+    p = predicted_ratings[-num_docs:]
+    random.shuffle(p)
+    for predicted,d in p:
+        #print predicted, associated[d]
+        print '%s (%s)' % (associated[d][1], d)
+
+
+

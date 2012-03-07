@@ -375,7 +375,7 @@ def calculate_EZZT(big_phi):
     for i in xrange(K):
         for j in xrange(K):
             inner_sum[i,j] = np.sum(np.multiply.outer(big_phi[:,i], big_phi[:,j])) - np.sum(np.dot(big_phi[:,i], big_phi[:,j]))
-    inner_sum += np.diagonal(np.sum(big_phi, axis=0))
+    inner_sum += np.diag(np.sum(big_phi, axis=0))
     inner_sum /= (N * N)
     return inner_sum
 

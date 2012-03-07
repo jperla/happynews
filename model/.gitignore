@@ -3,6 +3,7 @@
 *.npy
 *.gz
 *.npz
+*.txt
 
 *.output
 
