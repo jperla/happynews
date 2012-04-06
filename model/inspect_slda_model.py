@@ -14,6 +14,14 @@ import jsondata
 
 import numpy as np
 
+def predict(eta, phi):
+    Ks = len(eta)
+    N,K = phi.shape
+    phi = phi[:,-Ks:]
+    EZ = np.sum(phi, axis=0) / N
+    return np.dot(eta, EZ)
+
+
 if __name__=='__main__':
     phi_filename = sys.argv[1]
     vocab_filename = sys.argv[2]
@@ -33,13 +41,6 @@ if __name__=='__main__':
 
     if associated_filename is not None:
         associated = jsondata.read(associated_filename)
-
-    def predict(eta, phi):
-        Ks = len(eta)
-        N,K = phi.shape
-        phi = phi[:,-Ks:]
-        EZ = np.sum(phi, axis=0) / N
-        return np.dot(eta, EZ)
 
     print 'read in data...'
     predicted_ratings = list(sorted((predict(eta, p),i) for i,p in enumerate(phi)))

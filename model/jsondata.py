@@ -11,7 +11,7 @@
 
     GNU Affero General Public License. See <http://www.gnu.org/licenses/>.
 """
-import json
+import cjson
 
 try:
     import numpypy as numpy
@@ -41,9 +41,9 @@ def save_data(filename, data):
                     for i,d in enumerate(data):
                         if i != 0:
                             f.write('\n')
-                        f.write(json.dumps(d))
+                        f.write(cjson.encode(d))
                 else:
-                    f.write(json.dumps(data))
+                    f.write(cjson.encode(data))
 
 
 def read_data(filename):
@@ -59,7 +59,7 @@ def read_data(filename):
         return numpy.loadtxt(filename)
     else:
         with open(filename, 'r') as f:
-            return [json.loads(r) for r in f.xreadlines()]
+            return [cjson.decode(r) for r in f.xreadlines()]
 
 read = lambda f: read_data(f) # read_data function is deprecated
 save = lambda f,d: save_data(f,d)

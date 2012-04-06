@@ -1,0 +1,6 @@
+# TODO
+- run this on sentiment dataset
+- F1 score on data
+- compare full article human labels to title human labels
+
+- run this again with different sentiment params?

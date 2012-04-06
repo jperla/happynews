@@ -2,6 +2,8 @@ hnenv/*
 oldhnenv/*
 testmodel/*
 
+*.DS_Store
+
 # slda source; unreleased yet
 ccode/src/*
 

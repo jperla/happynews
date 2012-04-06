@@ -4,6 +4,8 @@
 *.gz
 *.npz
 *.txt
+*.csv
+*.swp
 
 *.output
 
